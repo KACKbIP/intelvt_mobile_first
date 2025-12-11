@@ -1,0 +1,25 @@
+import 'package:flutter/material.dart';
+import 'screens/login_page.dart';  
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'VideoTaxi App',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue,
+      ),
+
+      // Стартовый экран — Логин
+      home: const LoginPage(),
+    );
+  }
+}
