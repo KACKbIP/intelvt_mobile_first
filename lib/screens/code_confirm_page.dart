@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '/services/api_client.dart';
 import 'parent_dashboard_page.dart';
+import '/services/push_device_service.dart';
 
 class CodeConfirmPage extends StatefulWidget {
   final String phone;
@@ -59,20 +60,23 @@ if (widget.isForPasswordReset) {
   );
 } else {
   // подтверждение регистрации + автологин
-  await ApiClient.confirmRegistration(
-    phone: widget.phone,
-    password: widget.password,   // 👈 важное место
-    code: code,
-  );
+final auth = await ApiClient.confirmRegistration(
+  phone: widget.phone,
+  password: widget.password,
+  code: code,
+);
 
-  if (!mounted) return;
+// ✅ регистрируем FCM токен в UserDevices (уже есть JWT, потому что confirmRegistration делает login)
+await PushDeviceService().registerDevice();
 
-  // успешная регистрация → дашборд
-  Navigator.pushAndRemoveUntil(
-    context,
-    MaterialPageRoute(builder: (_) => const ParentDashboardPage()),
-    (route) => false,
-  );
+if (!mounted) return;
+
+// если хочешь — можешь передать auth.userId/fullName в следующий экран
+Navigator.pushAndRemoveUntil(
+  context,
+  MaterialPageRoute(builder: (_) => const ParentDashboardPage()),
+  (route) => false,
+);
 }
     } on AuthException catch (e) {
       if (!mounted) return;
@@ -173,8 +177,7 @@ if (widget.isForPasswordReset) {
 
     try {
       await ApiClient.registerStart(
-        phone: widget.phone,
-        password: widget.password,
+        phone: widget.phone
       );
 
       if (!mounted) return;

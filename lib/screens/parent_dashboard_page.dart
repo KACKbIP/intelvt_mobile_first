@@ -1,126 +1,202 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class ParentDashboardPage extends StatelessWidget {
+import '../services/api_client.dart';
+
+class ParentDashboardPage extends StatefulWidget {
   const ParentDashboardPage({super.key});
 
   @override
+  State<ParentDashboardPage> createState() => _ParentDashboardPageState();
+}
+
+class _ParentDashboardPageState extends State<ParentDashboardPage> {
+  late Future<ParentDashboardData> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ApiClient.getParentDashboard();
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _future = ApiClient.getParentDashboard();
+    });
+  }
+
+  Future<void> _editSoldierName(
+    BuildContext context,
+    SoldierDashboardData soldier,
+  ) async {
+    final controller = TextEditingController(text: soldier.soldierName);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Имя военнослужащего'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Имя (как будет отображаться у вас)',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) return;
+                Navigator.of(context).pop(text);
+              },
+              child: const Text('Сохранить'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    try {
+      await ApiClient.updateSoldierName(
+        soldierId: soldier.soldierId,
+        name: result,
+      );
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка: $e')),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Мок-данные, потом заменишь на реальные с API
-    const soldierName = 'Кенесары Касымулы';
-    const soldierUnit = 'В/ч 12345, Алматы';
-    const soldierStatus = 'Доступен';
-    const soldierStatusColor = Colors.green;
-
-    const balanceTenge = 1700;       // баланс в тенге
-    const tariffPerMinute = 100;     // 1 минута = 100 ₸
-    const minutesUsedToday = 12;     // сколько минут уже потратили
-    const nextLimitDate = '12.12.2025';
-
-    final calls = [
-      const CallItem(
-        type: CallType.answered,
-        dateTime: 'Сегодня, 10:23',
-        duration: '12 мин',
-      ),
-      const CallItem(
-        type: CallType.missed,
-        dateTime: 'Вчера, 21:40',
-        duration: '',
-      ),
-      const CallItem(
-        type: CallType.answered,
-        dateTime: '02.12.2025, 19:15',
-        duration: '8 мин',
-      ),
-      const CallItem(
-        type: CallType.answered,
-        dateTime: '01.12.2025, 18:05',
-        duration: '5 мин',
-      ),
-    ];
-
-    final notifications = [
-      'Был пропущенный звонок от Кенесары (вчера, 21:40)',
-      'Лимит минут обновлён (01.12.2025)',
-      'Профиль успешно подтверждён',
-    ];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Кабинет родителя'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SoldierCard(
-                name: soldierName,
-                unit: soldierUnit,
-                status: soldierStatus,
-                statusColor: soldierStatusColor,
+        child: FutureBuilder<ParentDashboardData>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Ошибка при загрузке: ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            final data = snapshot.data!;
+            final parentName = data.parentName;
+            final soldiers = data.soldiers;
+            final notifications = data.notifications;
+
+            return RefreshIndicator(
+              onRefresh: _reload,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ParentCard(parentName: parentName),
+                    const SizedBox(height: 16),
+
+                    for (final soldier in soldiers) ...[
+                      Text(
+                        soldier.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      _SoldierCard(
+                        name: soldier.name,
+                        unit: soldier.unit,
+                        status: soldier.balanceTenge > 0
+                            ? 'Можно звонить'
+                            : 'Баланс нулевой',
+                        statusColor: soldier.balanceTenge > 0
+                            ? Colors.green
+                            : Colors.red,
+                        onEditName: () => _editSoldierName(context, soldier),
+                      ),
+                      const SizedBox(height: 12),
+
+                      _BalanceCard(
+                        balanceTenge: soldier.balanceTenge,
+                        tariffPerMinute: soldier.tariffPerMinute,
+                        minutesUsedToday: soldier.minutesUsedToday,
+                        nextLimitDate: null, // пока сервер не отдаёт эту дату
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (soldier.lastCall != null ||
+                          soldier.calls.isNotEmpty) ...[
+                        _LastCallCard(
+                          lastCall: soldier.lastCall ??
+                              soldier.calls.first,
+                        ),
+                        const SizedBox(height: 12),
+                        if (soldier.calls.isNotEmpty)
+                          _CallsHistoryCard(calls: soldier.calls)
+                        else
+                          const Text(
+                            'Пока нет истории звонков',
+                            style: TextStyle(
+                                fontSize: 14, color: Colors.grey),
+                          ),
+                      ] else
+                        const Text(
+                          'Пока нет звонков',
+                          style:
+                              TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+
+                      const SizedBox(height: 20),
+                    ],
+
+                    _NotificationsCard(notifications: notifications),
+                    const SizedBox(height: 16),
+
+                    _HelpCard(),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-
-              _BalanceCard(
-                balanceTenge: balanceTenge,
-                tariffPerMinute: tariffPerMinute,
-                minutesUsedToday: minutesUsedToday,
-                nextLimitDate: nextLimitDate,
-              ),
-              const SizedBox(height: 16),
-
-              _LastCallCard(lastCall: calls.first),
-              const SizedBox(height: 16),
-
-              _CallsHistoryCard(calls: calls),
-              const SizedBox(height: 16),
-
-              _NotificationsCard(notifications: notifications),
-              const SizedBox(height: 16),
-
-              _HelpCard(),
-              const SizedBox(height: 24),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-// ================== МОДЕЛИ ==================
-
-enum CallType { answered, missed }
-
-class CallItem {
-  final CallType type;
-  final String dateTime;
-  final String duration;
-
-  const CallItem({
-    required this.type,
-    required this.dateTime,
-    required this.duration,
-  });
-}
-
 // ================== ВИДЖЕТЫ ==================
 
-class _SoldierCard extends StatelessWidget {
-  final String name;
-  final String unit;
-  final String status;
-  final Color statusColor;
+class _ParentCard extends StatelessWidget {
+  final String parentName;
 
-  const _SoldierCard({
-    required this.name,
-    required this.unit,
-    required this.status,
-    required this.statusColor,
-  });
+  const _ParentCard({required this.parentName});
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +210,7 @@ class _SoldierCard extends StatelessWidget {
             CircleAvatar(
               radius: 28,
               child: Text(
-                name.isNotEmpty ? name[0] : '?',
+                parentName.isNotEmpty ? parentName[0].toUpperCase() : '?',
                 style: const TextStyle(fontSize: 24),
               ),
             ),
@@ -144,38 +220,16 @@ class _SoldierCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    name,
+                    parentName,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    unit,
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        status,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: statusColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                  const Text(
+                    'Родитель военнослужащего(их)',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
               ),
@@ -187,44 +241,130 @@ class _SoldierCard extends StatelessWidget {
   }
 }
 
+class _SoldierCard extends StatelessWidget {
+  final String name;
+  final String unit;
+  final String? status;
+  final Color? statusColor;
+  final VoidCallback? onEditName;
+
+  const _SoldierCard({
+    required this.name,
+    required this.unit,
+    this.status,
+    this.statusColor,
+    this.onEditName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              child: Text(
+                name.isNotEmpty ? name[0] : '?',
+                style: const TextStyle(fontSize: 20),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (onEditName != null)
+                        IconButton(
+                          icon: const Icon(Icons.edit, size: 20),
+                          tooltip: 'Изменить имя',
+                          onPressed: onEditName,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    unit,
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  if (status != null && status!.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        if (statusColor != null)
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        if (statusColor != null) const SizedBox(width: 6),
+                        Text(
+                          status!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: statusColor ?? Colors.grey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _BalanceCard extends StatelessWidget {
-  final int balanceTenge;      // баланс в тенге
-  final int tariffPerMinute;   // стоимость минуты
-  final int minutesUsedToday;  // сколько минут уже поговорили сегодня
-  final String nextLimitDate;
+  final int balanceTenge;
+  final int tariffPerMinute;
+  final int minutesUsedToday;
+  final String? nextLimitDate;
 
   const _BalanceCard({
     required this.balanceTenge,
     required this.tariffPerMinute,
     required this.minutesUsedToday,
-    required this.nextLimitDate,
+    this.nextLimitDate,
   });
 
-  static const String _kaspiUrl = 'https://kaspi.kz'; // сюда потом вставишь свой платежный линк
+  static const String _kaspiUrl = 'https://kaspi.kz';
   static const Color _kaspiRed = Color(0xFFE31E24);
 
   Future<void> _openKaspi() async {
     final uri = Uri.parse(_kaspiUrl);
-    if (!await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    )) {
-      // можно залогировать или показать ошибку, но пока просто игнор
-    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
   Widget build(BuildContext context) {
-    // сколько минут можно ещё поговорить
-    final int minutesLeft = tariffPerMinute == 0
-        ? 0
-        : balanceTenge ~/ tariffPerMinute;
+    final int minutesLeft =
+        tariffPerMinute == 0 ? 0 : balanceTenge ~/ tariffPerMinute;
 
-    // для прогресс-бара: использовано из общего лимита (использовано + остаток)
     final int totalMinutes = minutesLeft + minutesUsedToday;
-    final double progress = totalMinutes == 0
-        ? 0
-        : (minutesUsedToday / totalMinutes);
+    final double progress =
+        totalMinutes == 0 ? 0 : (minutesUsedToday / totalMinutes);
 
     return Card(
       elevation: 1,
@@ -244,7 +384,6 @@ class _BalanceCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                // Слева — баланс в деньгах и минутах
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,25 +406,28 @@ class _BalanceCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // Справа — тариф и служебная инфа
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
                       'Тариф: $tariffPerMinute ₸ / мин',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Сегодня использовано: $minutesUsedToday мин',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      'Следующее пополнение: $nextLimitDate',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
+                    if (nextLimitDate != null &&
+                        nextLimitDate!.isNotEmpty)
+                      Text(
+                        'Следующее пополнение: $nextLimitDate',
+                        style: const TextStyle(
+                            fontSize: 14, color: Colors.grey),
+                      ),
                   ],
                 ),
               ],
@@ -297,16 +439,16 @@ class _BalanceCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(3),
             ),
             const SizedBox(height: 12),
-
-            // Кнопка пополнения через Kaspi
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: _openKaspi,
                 style: TextButton.styleFrom(
                   foregroundColor: _kaspiRed,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                 ),
                 icon: const _KaspiLogo(),
                 label: const Text(
@@ -325,7 +467,6 @@ class _BalanceCard extends StatelessWidget {
   }
 }
 
-/// Простая эмблема Kaspi в виде красного кружка с белым "k"
 class _KaspiLogo extends StatelessWidget {
   const _KaspiLogo();
 
@@ -358,6 +499,21 @@ class _LastCallCard extends StatelessWidget {
 
   const _LastCallCard({required this.lastCall});
 
+  String _formatDateTime(DateTime dt) {
+    final d = dt.day.toString().padLeft(2, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final y = dt.year.toString();
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$d.$m.$y, $hh:$mm';
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds <= 0) return '';
+    final minutes = (seconds / 60).ceil();
+    return '$minutes мин';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMissed = lastCall.type == CallType.missed;
@@ -388,14 +544,14 @@ class _LastCallCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    lastCall.dateTime,
+                    _formatDateTime(lastCall.dateTime),
                     style: const TextStyle(fontSize: 14),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     isMissed
                         ? 'Пропущенный'
-                        : 'Длительность: ${lastCall.duration}',
+                        : 'Длительность: ${_formatDuration(lastCall.durationSeconds)}',
                     style: TextStyle(
                       fontSize: 14,
                       color: isMissed ? Colors.red : Colors.grey,
@@ -443,6 +599,21 @@ class _CallsHistoryCard extends StatelessWidget {
     }
   }
 
+  String _formatDateTime(DateTime dt) {
+    final d = dt.day.toString().padLeft(2, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final y = dt.year.toString();
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '$d.$m.$y, $hh:$mm';
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds <= 0) return '';
+    final minutes = (seconds / 60).ceil();
+    return '$minutes мин';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -461,53 +632,59 @@ class _CallsHistoryCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: calls.length,
-              separatorBuilder: (_, __) => const Divider(height: 12),
-              itemBuilder: (context, index) {
-                final call = calls[index];
-                final isMissed = call.type == CallType.missed;
+            if (calls.isEmpty)
+              const Text(
+                'Пока нет истории звонков',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: calls.length,
+                separatorBuilder: (_, __) => const Divider(height: 12),
+                itemBuilder: (context, index) {
+                  final call = calls[index];
+                  final isMissed = call.type == CallType.missed;
 
-                return Row(
-                  children: [
-                    Icon(
-                      _iconByType(call.type),
-                      color: _colorByType(call.type),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            call.dateTime,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            _labelByType(call.type),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isMissed ? Colors.red : Colors.grey,
-                            ),
-                          ),
-                        ],
+                  return Row(
+                    children: [
+                      Icon(
+                        _iconByType(call.type),
+                        color: _colorByType(call.type),
                       ),
-                    ),
-                    if (!isMissed && call.duration.isNotEmpty)
-                      Text(
-                        call.duration,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _formatDateTime(call.dateTime),
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _labelByType(call.type),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isMissed ? Colors.red : Colors.grey,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
-                );
-              },
-            ),
+                      if (!isMissed && call.durationSeconds > 0)
+                        Text(
+                          _formatDuration(call.durationSeconds),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
           ],
         ),
       ),
@@ -548,7 +725,8 @@ class _NotificationsCard extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: notifications.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -577,7 +755,10 @@ class _HelpCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 1,
-      color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.9),
+      color: Theme.of(context)
+          .colorScheme
+          .primaryContainer
+          .withOpacity(0.9),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -601,7 +782,7 @@ class _HelpCard extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: FilledButton.icon(
                 onPressed: () {
-                  // тут потом откроешь экран/диалог поддержки или чат
+                  // TODO: экран/диалог поддержки
                 },
                 icon: const Icon(Icons.support_agent),
                 label: const Text('Связаться с поддержкой'),

@@ -1,8 +1,12 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:io';
 
-/// Ответ авторизации (логин)
+import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+/// ====== АВТОРИЗАЦИЯ ======
+
 class AuthResponse {
   final int userId;
   final String accessToken;
@@ -18,7 +22,7 @@ class AuthResponse {
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     return AuthResponse(
-      userId: json['userId'] as int,
+      userId: (json['userId'] as num).toInt(),
       accessToken: json['accessToken'] as String,
       refreshToken: json['refreshToken'] as String,
       fullName: json['fullName'] as String?,
@@ -26,7 +30,6 @@ class AuthResponse {
   }
 }
 
-/// Исключение для ошибок авторизации / API
 class AuthException implements Exception {
   final String message;
   AuthException(this.message);
@@ -35,304 +38,460 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+/// ====== DASHBOARD МОДЕЛИ ======
+
+enum CallType { answered, missed }
+
+class CallItem {
+  final CallType type;
+  final DateTime dateTime;
+  final int durationSeconds;
+
+  CallItem({
+    required this.type,
+    required this.dateTime,
+    required this.durationSeconds,
+  });
+
+  factory CallItem.fromJson(Map<String, dynamic> json) {
+    final typeStr = (json['type'] as String?) ?? 'answered';
+    final type = typeStr == 'missed' ? CallType.missed : CallType.answered;
+
+    return CallItem(
+      type: type,
+      dateTime: DateTime.parse(json['dateTime'] as String),
+      durationSeconds: (json['durationSeconds'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class SoldierDashboardData {
+  final int soldierId;
+  final String soldierName;
+  final String unit;
+  final String uniqueNumber;
+  final int balanceTenge;
+  final int tariffPerMinute;
+  final int minutesUsedToday;
+  final CallItem? lastCall;
+  final List<CallItem> calls;
+
+  SoldierDashboardData({
+    required this.soldierId,
+    required this.soldierName,
+    required this.unit,
+    required this.uniqueNumber,
+    required this.balanceTenge,
+    required this.tariffPerMinute,
+    required this.minutesUsedToday,
+    required this.lastCall,
+    required this.calls,
+  });
+
+  factory SoldierDashboardData.fromJson(Map<String, dynamic> json) {
+    final callsJson = (json['calls'] as List<dynamic>?) ?? [];
+
+    return SoldierDashboardData(
+      soldierId: (json['soldierId'] as num).toInt(),
+      soldierName: (json['soldierName'] ?? '') as String,
+      unit: (json['unit'] ?? '') as String,
+      uniqueNumber: (json['uniqueNumber'] ?? '') as String,
+      balanceTenge: (json['balanceTenge'] as num?)?.toInt() ?? 0,
+      tariffPerMinute: (json['tariffPerMinute'] as num?)?.toInt() ?? 0,
+      minutesUsedToday: (json['minutesUsedToday'] as num?)?.toInt() ?? 0,
+      lastCall: json['lastCall'] == null
+          ? null
+          : CallItem.fromJson(json['lastCall'] as Map<String, dynamic>),
+      calls: callsJson
+          .map((e) => CallItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  String get name => soldierName;
+}
+
+class ParentDashboardData {
+  final String parentName;
+  final List<SoldierDashboardData> soldiers;
+  final List<String> notifications;
+
+  ParentDashboardData({
+    required this.parentName,
+    required this.soldiers,
+    required this.notifications,
+  });
+
+  factory ParentDashboardData.fromJson(Map<String, dynamic> json) {
+    final soldiersJson = (json['soldiers'] as List<dynamic>?) ?? [];
+    final notifsJson = (json['notifications'] as List<dynamic>?) ?? [];
+
+    return ParentDashboardData(
+      parentName: json['parentName'] as String? ?? '',
+      soldiers: soldiersJson
+          .map((e) => SoldierDashboardData.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      notifications: notifsJson.map((e) => e.toString()).toList(),
+    );
+  }
+}
+
+/// ====== API CLIENT (DIO) ======
+
 class ApiClient {
-  /// Базовый URL API
-  ///
-  /// ⚠️ Если тестируешь с Android эмулятором:
-  ///   - замени на 'http://10.0.2.2:5197'
-  /// Если с реального устройства:
-  ///   - укажи IP твоего ПК, например 'http://192.168.0.10:5197'
-  static const String _baseUrl = 'http://localhost:5197';
+  /// твой ngrok / prod url
+  static const String _baseUrl = 'https://551643173e20.ngrok-free.app';
   static const String _authBase = '$_baseUrl/api/mobile';
 
   static const _storage = FlutterSecureStorage();
 
-  // =================== ВСПОМОГАТЕЛЬНОЕ ===================
+  static const _kAccess = 'auth_access_token';
+  static const _kRefresh = 'auth_refresh_token';
+  static const _kUserId = 'auth_user_id';
+  static const _kFullName = 'auth_full_name';
 
-  static Future<String?> getToken() async {
-    return _storage.read(key: 'auth_token');
+  static final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: _baseUrl,
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: const {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    ),
+  )..interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final token = await getAccessToken();
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+          handler.next(options);
+        },
+        onError: (e, handler) async {
+          // сейчас делаем просто человеческую ошибку без refresh
+          handler.next(e);
+        },
+      ),
+    );
+
+  // ---------- STORAGE HELPERS ----------
+
+  static Future<String?> getAccessToken() => _storage.read(key: _kAccess);
+  static Future<String?> getRefreshToken() => _storage.read(key: _kRefresh);
+
+  static Future<int?> getUserId() async {
+    final v = await _storage.read(key: _kUserId);
+    if (v == null) return null;
+    return int.tryParse(v);
+  }
+
+  static Future<void> saveAuth(AuthResponse auth) async {
+    await _storage.write(key: _kAccess, value: auth.accessToken);
+    await _storage.write(key: _kRefresh, value: auth.refreshToken);
+    await _storage.write(key: _kUserId, value: auth.userId.toString());
+    if (auth.fullName != null) {
+      await _storage.write(key: _kFullName, value: auth.fullName);
+    }
   }
 
   static Future<void> logout() async {
-    await _storage.delete(key: 'auth_token');
+    await _storage.delete(key: _kAccess);
+    await _storage.delete(key: _kRefresh);
+    await _storage.delete(key: _kUserId);
+    await _storage.delete(key: _kFullName);
   }
 
-  // =================== АВТОРИЗАЦИЯ ===================
+  // ---------- AUTH ----------
 
-  /// Логин по телефону и паролю.
-  /// Возвращает AuthResponse (userId, accessToken, refreshToken).
   static Future<AuthResponse> login({
     required String phone,
     required String password,
   }) async {
-    final uri = Uri.parse('$_authBase/login');
-
-    final response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'phone': phone,
-        'password': password,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final auth = AuthResponse.fromJson(data);
-
-      // сохраняем accessToken
-      await _storage.write(key: 'auth_token', value: auth.accessToken);
-
-      return auth;
-    } else if (response.statusCode == 400 || response.statusCode == 401) {
-      // неверный логин/пароль
-      try {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        throw AuthException(
-          data['message']?.toString() ?? 'Неверный телефон или пароль',
-        );
-      } catch (_) {
-        throw AuthException('Неверный телефон или пароль');
-      }
-    } else {
-      throw AuthException(
-        'Ошибка сервера (${response.statusCode}). Попробуйте позже.',
+    try {
+      final resp = await _dio.post<Map<String, dynamic>>(
+        '$_authBase/login',
+        data: {
+          'phone': phone,
+          'password': password,
+        },
       );
+
+      final data = resp.data ?? {};
+      final auth = AuthResponse.fromJson(data);
+      await saveAuth(auth);
+      return auth;
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    } catch (e) {
+      throw AuthException(e.toString());
     }
   }
 
-  /// Прямая регистрация пользователя (без кода).
-  /// Сейчас используется внутри confirmRegistration после проверки кода.
   static Future<void> register({
     required String phone,
     required String password,
   }) async {
-    final uri = Uri.parse('$_authBase/register');
-
-    final response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'phone': phone,
-        'password': password,
-      }),
-    );
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return;
-    } else if (response.statusCode == 409) {
-      throw AuthException('Пользователь с таким номером уже существует');
-    } else if (response.statusCode == 400) {
-      try {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        throw AuthException(
-          data['message']?.toString() ??
-              'Некорректные данные. Проверьте номер и пароль.',
-        );
-      } catch (_) {
-        throw AuthException('Некорректные данные. Проверьте номер и пароль.');
-      }
-    } else {
-      throw AuthException(
-        'Ошибка сервера (${response.statusCode}). Попробуйте позже.',
+    try {
+      await _dio.post(
+        '$_authBase/register',
+        data: {
+          'phone': phone,
+          'password': password,
+        },
       );
+    } on DioException catch (e) {
+      // у тебя было: 409 -> "уже существует"
+      if (e.response?.statusCode == 409) {
+        throw AuthException('Пользователь с таким номером уже существует');
+      }
+      throw AuthException(_extractMessage(e));
     }
   }
 
-  // =================== РЕГИСТРАЦИЯ С КОДОМ ===================
+  // ---------- REGISTRATION BY CODE ----------
 
-  /// Шаг 1: отправка SMS-кода при регистрации.
-  /// Используется в RegisterPage.
   static Future<void> registerStart({
     required String phone,
-    required String password,
   }) async {
-    final uri = Uri.parse('$_authBase/send-code');
-
-    final response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'phone': phone,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return;
-    } else if (response.statusCode == 400) {
-      try {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        throw AuthException(
-          data['message']?.toString() ?? 'Некорректный номер телефона',
-        );
-      } catch (_) {
-        throw AuthException('Некорректный номер телефона');
-      }
-    } else {
-      throw AuthException(
-        'Ошибка при отправке кода (${response.statusCode}). Попробуйте позже.',
+    try {
+      await _dio.post(
+        '$_authBase/send-code',
+        data: {'phone': phone},
       );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
     }
   }
 
-  /// Шаг 2: подтверждение кода + регистрация + автологин.
-  /// Используется в CodeConfirmPage (при isForPasswordReset == false).
-  ///
-  /// Возвращает AuthResponse (как login).
   static Future<AuthResponse> confirmRegistration({
     required String phone,
     required String password,
     required String code,
   }) async {
-    // 1. Проверяем код
-    final verifyUri = Uri.parse('$_authBase/verify-code');
+    try {
+      // verify-code
+      await _dio.post(
+        '$_authBase/verify-code',
+        data: {
+          'phone': phone,
+          'code': code,
+        },
+      );
 
-    final verifyResp = await http.post(
-      verifyUri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'phone': phone,
-        'code': code,
-      }),
-    );
-
-    if (verifyResp.statusCode != 200) {
-      if (verifyResp.statusCode == 400) {
-        try {
-          final data = jsonDecode(verifyResp.body) as Map<String, dynamic>;
-          throw AuthException(
-            data['message']?.toString() ?? 'Неверный или просроченный код',
-          );
-        } catch (_) {
-          throw AuthException('Неверный или просроченный код');
-        }
-      } else {
-        throw AuthException(
-          'Ошибка при проверке кода (${verifyResp.statusCode}). Попробуйте позже.',
-        );
-      }
+      await register(phone: phone, password: password);
+      return await login(phone: phone, password: password);
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
     }
-
-    // 2. Регистрируем пользователя
-    await register(phone: phone, password: password);
-
-    // 3. Автоматически логиним
-    final auth = await login(phone: phone, password: password);
-    return auth;
   }
 
-  // =================== ВОССТАНОВЛЕНИЕ ПАРОЛЯ ===================
+  // ---------- PASSWORD RESET (same send-code) ----------
 
-  /// Отправка кода для восстановления пароля.
-  /// Сейчас использует тот же эндпоинт send-code.
   static Future<void> sendPasswordResetCode({
     required String phone,
   }) async {
-    final uri = Uri.parse('$_authBase/send-code');
-
-    final response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone}),
-    );
-
-    if (response.statusCode == 200) {
-      return;
-    } else if (response.statusCode == 400) {
-      try {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        throw AuthException(
-          data['message']?.toString() ?? 'Некорректный номер телефона',
-        );
-      } catch (_) {
-        throw AuthException('Некорректный номер телефона');
-      }
-    } else {
-      throw AuthException(
-        'Ошибка при отправке кода (${response.statusCode}). Попробуйте позже.',
+    try {
+      await _dio.post(
+        '$_authBase/send-code',
+        data: {'phone': phone},
       );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
     }
   }
 
-  // =================== ПРОФИЛЬ: ИМЯ И ПАРОЛЬ ===================
+  // ---------- PROFILE ----------
 
-  /// Обновление имени пользователя.
-  /// Бэк ждёт:
-  /// POST /api/mobile/update-name
-  /// { "userId": 123, "fullName": "Имя" }
   static Future<void> updateProfileName({
     required int userId,
     required String newName,
   }) async {
-    final uri = Uri.parse('$_authBase/update-name');
-
-    final response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'userId': userId,
-        'fullName': newName,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      return;
-    } else if (response.statusCode == 400) {
-      try {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        throw AuthException(
-          data['message']?.toString() ?? 'Некорректное имя',
-        );
-      } catch (_) {
-        throw AuthException('Некорректное имя');
-      }
-    } else if (response.statusCode == 404) {
-      throw AuthException('Пользователь не найден');
-    } else {
-      throw AuthException(
-        'Ошибка при обновлении имени (${response.statusCode})',
+    try {
+      await _dio.post(
+        '$_authBase/update-name',
+        data: {
+          'userId': userId,
+          'fullName': newName,
+        },
       );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
     }
   }
 
-  /// Смена пароля.
-  /// Бэк ждёт:
-  /// POST /api/mobile/change-password
-  /// { "userId": 123, "currentPassword": "...", "newPassword": "..." }
   static Future<void> changePassword({
     required int userId,
     required String currentPassword,
     required String newPassword,
   }) async {
-    final uri = Uri.parse('$_authBase/change-password');
+    try {
+      await _dio.post(
+        '$_authBase/change-password',
+        data: {
+          'userId': userId,
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        },
+      );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
+  }
 
-    final response = await http.post(
-      uri,
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'userId': userId,
-        'currentPassword': currentPassword,
-        'newPassword': newPassword,
-      }),
-    );
+  // ---------- DASHBOARD ----------
 
-    if (response.statusCode == 200) {
+  static Future<ParentDashboardData> getParentDashboard() async {
+    final token = await getAccessToken();
+    if (token == null || token.isEmpty) {
+      throw AuthException('Нет токена. Войдите заново.');
+    }
+
+    try {
+      final resp = await _dio.get<Map<String, dynamic>>(
+        '$_authBase/parent-dashboard',
+      );
+
+      final data = resp.data ?? {};
+      return ParentDashboardData.fromJson(data);
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
+  }
+
+  static Future<void> updateSoldierName({
+    required int soldierId,
+    required String name,
+  }) async {
+    final token = await getAccessToken();
+    if (token == null || token.isEmpty) {
+      throw AuthException('Нет токена. Войдите заново.');
+    }
+
+    try {
+      await _dio.post(
+        '$_authBase/update-soldier-name',
+        data: {
+          'soldierId': soldierId,
+          'soldierName': name,
+        },
+      );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
+  }
+
+  // ---------- DEVICE REGISTER (ДЛЯ PUSH) ----------
+
+  /// Вызови ЭТО после успешного login/confirmRegistration
+  /// и также подпишись на onTokenRefresh (я покажу дальше).
+  static Future<void> registerDevice({
+    String? deviceId,
+    String? deviceName,
+  }) async {
+    final token = await getAccessToken();
+    if (token == null || token.isEmpty) {
+      // пользователь не залогинен — нечего регистрировать
       return;
-    } else if (response.statusCode == 400 || response.statusCode == 401) {
+    }
+
+    final fcm = await FirebaseMessaging.instance.getToken();
+    if (fcm == null || fcm.isEmpty) return;
+
+    final platform = Platform.isAndroid
+        ? 'android'
+        : Platform.isIOS
+            ? 'ios'
+            : 'unknown';
+
+    final name = deviceName ??
+        (Platform.isAndroid
+            ? 'Android'
+            : Platform.isIOS
+                ? 'iOS'
+                : 'Unknown');
+
+    try {
+      await _dio.post(
+        '$_baseUrl/api/mobile/devices/register',
+        data: {
+          'platform': platform,
+          'pushToken': fcm,
+          'deviceId': deviceId,
+          'deviceName': name,
+        },
+      );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
+  }
+
+  /// Один раз вызвать после логина: будет обновлять токен автоматически
+  static void listenTokenRefresh({
+    String? deviceId,
+    String? deviceName,
+  }) {
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+      final access = await getAccessToken();
+      if (access == null || access.isEmpty) return;
+
+      final platform = Platform.isAndroid
+          ? 'android'
+          : Platform.isIOS
+              ? 'ios'
+              : 'unknown';
+
+      final name = deviceName ??
+          (Platform.isAndroid
+              ? 'Android'
+              : Platform.isIOS
+                  ? 'iOS'
+                  : 'Unknown');
+
       try {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        throw AuthException(
-          data['message']?.toString() ?? 'Неверный текущий пароль',
+        await _dio.post(
+          '$_baseUrl/api/mobile/devices/register',
+          data: {
+            'platform': platform,
+            'pushToken': newToken,
+            'deviceId': deviceId,
+            'deviceName': name,
+          },
         );
       } catch (_) {
-        throw AuthException('Неверный текущий пароль');
+        // не критично: позже обновится
       }
-    } else if (response.statusCode == 404) {
-      throw AuthException('Пользователь не найден');
-    } else {
-      throw AuthException(
-        'Ошибка при смене пароля (${response.statusCode})',
-      );
+    });
+  }
+
+  // ---------- ERROR PARSE ----------
+
+  static String _extractMessage(DioException e) {
+    final status = e.response?.statusCode;
+    final data = e.response?.data;
+
+    // если бэк вернул { message: "..." }
+    if (data is Map && data['message'] != null) {
+      return data['message'].toString();
     }
+
+    // если бэк вернул строку
+    if (data is String && data.trim().isNotEmpty) {
+      return data;
+    }
+
+    if (status == 401) return 'Сессия истекла, войдите заново';
+    if (status == 403) return 'Доступ запрещён';
+    if (status == 404) return 'Не найдено';
+    if ((status ?? 0) >= 500) return 'Ошибка сервера';
+
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      return 'Таймаут сети';
+    }
+
+    return 'Ошибка сети';
   }
 }

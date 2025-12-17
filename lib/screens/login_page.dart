@@ -5,6 +5,7 @@ import 'main_navigation_page.dart';
 import 'register_page.dart';
 import 'forgot_password_page.dart';
 import '/services/api_client.dart';
+import '/services/push_device_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -101,22 +102,25 @@ class _LoginPageState extends State<LoginPage> {
 
       // 👇 ТЕПЕРЬ ЛОГИН ВОЗВРАЩАЕТ ОБЪЕКТ С userId
       final auth = await ApiClient.login(
-        phone: normalizedPhone,
-        password: _passwordController.text,
-      );
+  phone: normalizedPhone,
+  password: _passwordController.text,
+);
 
-      if (!mounted) return;
+// ✅ Регистрируем девайс для push (после логина, когда токен уже сохранён)
+await PushDeviceService().registerDevice();
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MainNavigationPage(
-            userId: auth.userId,
-            phone: normalizedPhone,
-            fullName: auth.fullName, // может быть null — это ок
-          ),
-        ),
-      );
+if (!mounted) return;
+
+Navigator.pushReplacement(
+  context,
+  MaterialPageRoute(
+    builder: (_) => MainNavigationPage(
+      userId: auth.userId,
+      phone: normalizedPhone,
+      fullName: auth.fullName,
+    ),
+  ),
+);
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -127,14 +131,13 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
       );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Не удалось войти. Попробуйте позже.'),
-        ),
-      );
-    } finally {
+    } catch (e) {
+  debugPrint('LOGIN ERROR: $e');
+  if (!mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Не удалось войти: $e')),
+  );
+}finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }

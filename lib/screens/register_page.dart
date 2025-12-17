@@ -81,8 +81,7 @@ class _RegisterPageState extends State<RegisterPage> {
     final normalizedPhone = _normalizePhone();
 
     await ApiClient.registerStart(
-      phone: normalizedPhone,
-      password: _passwordController.text,
+      phone: normalizedPhone
     );
 
     if (!mounted) return;
