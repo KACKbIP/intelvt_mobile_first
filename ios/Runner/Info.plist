@@ -45,5 +45,16 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+<array>
+    <string>fetch</string>
+    <string>remote-notification</string>
+    <string>voip</string> <string>audio</string> </array>
+<key>NSMicrophoneUsageDescription</key>
+<string>Нужен доступ к микрофону для разговора</string>
+<key>NSCameraUsageDescription</key>
+<string>Нужен доступ к камере для видеозвонка</string>
+<key>NSFaceIDUsageDescription</key>
+<string>Для быстрого входа в приложение</string>
 </dict>
 </plist>

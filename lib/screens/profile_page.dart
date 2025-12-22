@@ -309,13 +309,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: const Text("Изменить пароль"),
                   onTap: _changePassword,
                 ),
-                const Divider(height: 0),
-                ListTile(
-                  leading: const Icon(Icons.settings),
-                  title: const Text("Настройки"),
-                  onTap: _openSettings,
-                ),
-                const Divider(height: 0),
+                const Divider(height: 0),                
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.red),
                   title: const Text(

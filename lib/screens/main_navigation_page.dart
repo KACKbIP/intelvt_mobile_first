@@ -3,6 +3,8 @@ import 'parent_dashboard_page.dart';
 import 'calls_history_page.dart';
 import 'notifications_page.dart';
 import 'profile_page.dart';
+import '/services/permissions_service.dart';
+import '/services/api_client.dart';
 
 class MainNavigationPage extends StatefulWidget {
   final int userId;
@@ -31,7 +33,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     super.initState();
 
     _pages = [
-      const ParentDashboardPage(),   // при желании тоже можешь передать userId
+      const ParentDashboardPage(),   
       const CallsHistoryPage(),
       const NotificationsPage(),
       ProfilePage(
@@ -40,6 +42,34 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         fullName: widget.fullName,
       ),
     ];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPermissions();
+    });
+  }
+
+  Future<void> _checkPermissions() async {
+    // 1. Обновляем токен "тихо" (без всплывающих окон)
+    // Это нужно, чтобы сервер всегда знал актуальный адрес устройства
+    try {
+      await ApiClient.registerDevice(deviceName: 'Parent Android'); 
+    } catch (e) {
+      // Логируем ошибку только в консоль разработчика
+      debugPrint("⚠️ Не удалось обновить токен: $e");
+    }
+    
+    final service = PermissionsService();
+    
+    // 2. Просим игнорировать оптимизацию батареи
+    await service.requestBatteryOptimization();
+    
+    // 3. Просим разрешение рисовать поверх окон (для CallKit на некоторых Android)
+    await service.requestSystemAlertWindow();
+
+    // 4. Если это Xiaomi - просим включить автозапуск
+    if (mounted) {
+      await service.openAutoStartSettings(context);
+    }
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_client.dart';
+import 'calls_history_page.dart'; // ✅ Импортируем страницу истории
 
 class ParentDashboardPage extends StatefulWidget {
   const ParentDashboardPage({super.key});
@@ -146,19 +147,21 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                         balanceTenge: soldier.balanceTenge,
                         tariffPerMinute: soldier.tariffPerMinute,
                         minutesUsedToday: soldier.minutesUsedToday,
-                        nextLimitDate: null, // пока сервер не отдаёт эту дату
+                        nextLimitDate: null, 
                       ),
                       const SizedBox(height: 12),
 
                       if (soldier.lastCall != null ||
                           soldier.calls.isNotEmpty) ...[
                         _LastCallCard(
-                          lastCall: soldier.lastCall ??
-                              soldier.calls.first,
+                          lastCall: soldier.lastCall ?? soldier.calls.first,
                         ),
                         const SizedBox(height: 12),
                         if (soldier.calls.isNotEmpty)
-                          _CallsHistoryCard(calls: soldier.calls)
+                          _CallsHistoryCard(
+                            calls: soldier.calls,
+                            soldierName: soldier.name, // ✅ Передаем имя для навигации
+                          )
                         else
                           const Text(
                             'Пока нет истории звонков',
@@ -168,8 +171,7 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                       ] else
                         const Text(
                           'Пока нет звонков',
-                          style:
-                              TextStyle(fontSize: 14, color: Colors.grey),
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
                         ),
 
                       const SizedBox(height: 20),
@@ -569,8 +571,12 @@ class _LastCallCard extends StatelessWidget {
 
 class _CallsHistoryCard extends StatelessWidget {
   final List<CallItem> calls;
+  final String soldierName; // ✅ Новое поле
 
-  const _CallsHistoryCard({required this.calls});
+  const _CallsHistoryCard({
+    required this.calls,
+    required this.soldierName, // ✅ Требуем имя
+  });
 
   IconData _iconByType(CallType type) {
     switch (type) {
@@ -624,14 +630,46 @@ class _CallsHistoryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'История звонков',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+            // ✅ Заголовок с кнопкой "Все"
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'История звонков',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (calls.isNotEmpty)
+                  InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => CallsHistoryPage(
+                            soldierName: soldierName,
+                            calls: calls,
+                          ),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Text(
+                        'Все',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
+            
             if (calls.isEmpty)
               const Text(
                 'Пока нет истории звонков',
@@ -641,7 +679,8 @@ class _CallsHistoryCard extends StatelessWidget {
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: calls.length,
+                // Берем только первые 5 для превью
+                itemCount: calls.length > 5 ? 5 : calls.length,
                 separatorBuilder: (_, __) => const Divider(height: 12),
                 itemBuilder: (context, index) {
                   final call = calls[index];

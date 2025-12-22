@@ -1,37 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
-import 'main_navigation_page.dart';
+import 'pin_code_page.dart'; // ✅ Импортируем экран ПИН-кода
 import 'register_page.dart';
 import 'forgot_password_page.dart';
 import '/services/api_client.dart';
 import '/services/push_device_service.dart';
-
-void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Auth Demo',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
-          ),
-        ),
-      ),
-      home: const LoginPage(),
-    );
-  }
-}
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -60,8 +34,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// Нормализуем номер для API/БД:
-  /// "+7 (701) 123-45-67" -> "+77011234567"
+  /// Нормализуем номер для API/БД: "+7 (701) 123-45-67" -> "+77011234567"
   String _normalizePhone() {
     final digits = _phoneMask.getUnmaskedText(); // только цифры
     if (digits.length != 10) {
@@ -100,44 +73,52 @@ class _LoginPageState extends State<LoginPage> {
     try {
       final normalizedPhone = _normalizePhone();
 
-      // 👇 ТЕПЕРЬ ЛОГИН ВОЗВРАЩАЕТ ОБЪЕКТ С userId
+      // 1. Выполняем вход
       final auth = await ApiClient.login(
-  phone: normalizedPhone,
-  password: _passwordController.text,
-);
+        phone: normalizedPhone,
+        password: _passwordController.text,
+      );
 
-// ✅ Регистрируем девайс для push (после логина, когда токен уже сохранён)
-await PushDeviceService().registerDevice();
+      // 2. Регистрируем устройство для Push-уведомлений
+      try {
+        await PushDeviceService().registerDevice();
+      } catch (e) {
+        debugPrint('Push register error: $e');
+        // Не блокируем вход, если пуши не зарегистрировались
+      }
 
-if (!mounted) return;
+      if (!mounted) return;
 
-Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (_) => MainNavigationPage(
-      userId: auth.userId,
-      phone: normalizedPhone,
-      fullName: auth.fullName,
-    ),
-  ),
-);
+      // 3. ✅ Переходим на экран СОЗДАНИЯ ПИН-кода
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PinCodePage(
+            mode: PinMode.create, // Режим создания
+            userId: auth.userId,
+            phone: normalizedPhone,
+            fullName: auth.fullName,
+          ),
+        ),
+      );
+      
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
       );
     } on FormatException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
+        SnackBar(content: Text(e.message), backgroundColor: Colors.orange),
       );
     } catch (e) {
-  debugPrint('LOGIN ERROR: $e');
-  if (!mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('Не удалось войти: $e')),
-  );
-}finally {
+      debugPrint('LOGIN ERROR: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка входа: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -161,6 +142,7 @@ Navigator.pushReplacement(
                   Icon(
                     Icons.lock_outline,
                     size: size.width * 0.18,
+                    color: Theme.of(context).primaryColor,
                   ),
                   const SizedBox(height: 16),
                   const Text(
@@ -221,16 +203,19 @@ Navigator.pushReplacement(
                         const SizedBox(height: 12),
 
                         // Забыли пароль?
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const ForgotPasswordPage(),
-                              ),
-                            );
-                          },
-                          child: const Text('Забыли пароль?'),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ForgotPasswordPage(),
+                                ),
+                              );
+                            },
+                            child: const Text('Забыли пароль?'),
+                          ),
                         ),
 
                         const SizedBox(height: 8),
@@ -247,6 +232,7 @@ Navigator.pushReplacement(
                                     height: 22,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.5,
+                                      color: Colors.white,
                                     ),
                                   )
                                 : const Text(
