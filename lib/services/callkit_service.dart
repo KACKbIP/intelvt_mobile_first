@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
 import 'package:flutter_callkit_incoming/entities/call_event.dart';
@@ -8,42 +6,34 @@ import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
 import 'package:flutter_callkit_incoming/entities/ios_params.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:uuid/uuid.dart';
-import '../navigation.dart'; // Убедитесь, что здесь лежит navigatorKey
+import '../navigation.dart';
 import 'api_client.dart';
 
 class CallKitService {
   static final Uuid _uuid = const Uuid();
 
-  // ✅ Теперь этот метод вызываем из MyApp, чтобы UI был готов
+  // Флаг: если true — значит мы в режиме звонка
+  static bool isCallAcceptedMode = false;
+
+  // 🔥 ФЛАГ БЛОКИРОВКИ: Если true — игнорируем любые попытки открыть звонок
+  // (используется сразу после завершения, чтобы не попасть в петлю)
+  static bool ignoreActiveCalls = false;
+
   static void init() {
     FlutterCallkitIncoming.onEvent.listen((CallEvent? event) {
       if (event == null) return;
-      
-      debugPrint("📞 CallKit Event: ${event.event}");
-
       switch (event.event) {
-        // 1. Нажали кнопку "Принять"
         case Event.actionCallAccept:
-          _handleCallAccepted(event.body);
-          break;
-
-        // 2. Нажали на САМО УВЕДОМЛЕНИЕ (открыли приложение)
-        // Часто Android шлет это событие вместо Accept, если приложение было свернуто
         case Event.actionCallStart:
-          _handleCallAccepted(event.body);
-          break;
-
-        // 3. Другие способы открытия
         case Event.actionCallCallback:
+          isCallAcceptedMode = true;
           _handleCallAccepted(event.body);
           break;
-
-        // Сброс звонка
         case Event.actionCallDecline:
         case Event.actionCallEnded:
+          isCallAcceptedMode = false;
           _handleCallEnded(event.body);
           break;
-
         default:
           break;
       }
@@ -51,12 +41,7 @@ class CallKitService {
   }
 
   static Future<void> showIncomingCall(Map<String, dynamic> data) async {
-    debugPrint("========== INCOMING PUSH DATA ==========");
-    debugPrint(jsonEncode(data));
-
     final uuid = _uuid.v4();
-
-    // Парсим данные
     final String appId = data['appId'] ?? data['appid'] ?? data['agoraAppId'] ?? '';
     final String channelName = data['channelName'] ?? '';
     final String token = data['agoraToken'] ?? data['token'] ?? '';
@@ -74,8 +59,6 @@ class CallKitService {
       duration: 45000,
       textAccept: 'Ответить',
       textDecline: 'Сбросить',
-      
-      // Данные для экрана звонка
       extra: <String, dynamic>{
         'appId': appId,
         'channelName': channelName,
@@ -83,9 +66,7 @@ class CallKitService {
         'uid': uid,
         'callId': callId,
       },
-      
       headers: <String, dynamic>{'apiKey': 'Abc@123!', 'platform': 'flutter'},
-      
       android: const AndroidParams(
         isCustomNotification: true,
         isShowLogo: false,
@@ -96,7 +77,6 @@ class CallKitService {
         isShowCallID: false,
         isShowFullLockedScreen: true,
       ),
-      
       ios: const IOSParams(
         iconName: 'CallKitLogo',
         handleType: 'generic',
@@ -112,34 +92,18 @@ class CallKitService {
     await FlutterCallkitIncoming.showCallkitIncoming(params);
   }
 
-  // --- ЛОГИКА ПЕРЕХОДА ---
-  static Future<void> _handleCallAccepted(Map<dynamic, dynamic> body) async {
-    debugPrint("✅ Call Accepted. Готовим переход...");
-
+  static void _handleCallAccepted(Map<dynamic, dynamic> body) {
     final extra = body['extra'] as Map<dynamic, dynamic>?;
-    
     if (extra != null) {
       final args = Map<String, dynamic>.from(extra);
       
-      // 1. Пробуем перейти сразу (если мы в приложении)
+      // Если навигатор уже готов (приложение активно) — переходим.
+      // Если нет — AuthCheckScreen (в main.dart) сам подхватит флаг isCallAcceptedMode
       if (navigatorKey.currentState != null) {
-        debugPrint("🚀 (Instant) Navigating to CallPage...");
+        // Очищаем стек от возможных дублей
+        navigatorKey.currentState!.popUntil((route) => route.settings.name != '/call');
         navigatorKey.currentState!.pushNamed('/call', arguments: args);
-        return;
       }
-
-      // 2. Если навигатор не готов (холодный старт), ждем
-      debugPrint("⏳ Навигатор не готов, ждем 800мс...");
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (navigatorKey.currentState != null) {
-        debugPrint("🚀 (Delayed) Navigating to CallPage...");
-        navigatorKey.currentState!.pushNamed('/call', arguments: args);
-      } else {
-        debugPrint("⛔ FATAL: Navigator is NULL even after delay.");
-      }
-    } else {
-      debugPrint("⛔ ERROR: Extra data is null.");
     }
   }
 
@@ -148,9 +112,7 @@ class CallKitService {
     if (extra != null && extra['callId'] != null) {
       final callId = int.tryParse(extra['callId'].toString());
       if (callId != null) {
-        try {
-          await ApiClient.endCall(callId);
-        } catch (_) {}
+        try { await ApiClient.endCall(callId); } catch (_) {}
       }
     }
   }

@@ -1,13 +1,15 @@
-import 'dart:async'; // Добавил для StreamSubscription
+import 'dart:async';
 import 'dart:io';
 
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // Добавил для перехвата пуша
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import '../services/api_client.dart';
+import '../services/callkit_service.dart'; // ✅ Импорт обязателен
 
 class CallPage extends StatefulWidget {
   final Map<String, dynamic> args;
@@ -17,66 +19,61 @@ class CallPage extends StatefulWidget {
   State<CallPage> createState() => _CallPageState();
 }
 
-class _CallPageState extends State<CallPage> {
+class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   RtcEngine? _engine;
-  StreamSubscription<RemoteMessage>? _fcmSubscription; // Подписка на пуши
-
-  bool _joined = false;
-  int? _remoteUid;
-  bool _localUserJoined = false;
-
-  // Состояния кнопок
-  bool _isMuted = false;
-  bool _isVideoOff = false;
 
   late final String _appId;
   late final String _channel;
-  late int _uid;
+  late final int _uid;
   late String _token;
-  
-  // ID звонка для проверки (если передается в args)
-  String? _callId; 
+  String? _callId;
 
-  // Настройки сети
-  static const bool _forceTcp = true;
-  static const bool _enableProxy = true;
+  bool _badArgs = false;
+  bool _initializing = true;
+  bool _joined = false;
+  bool _localReady = false;
+  int? _remoteUid;
 
-  bool _refreshingToken = false;
+  bool _isMuted = false;
+  bool _isVideoOff = false;
+  bool _finishing = false;
+
+  StreamSubscription<RemoteMessage>? _fcmSub;
   DateTime? _lastTokenRefreshAt;
-
-  void _log(String msg) {
-    if (kDebugMode) debugPrint('[PARENT] $msg');
-  }
-
-  bool get _badArgs => _appId.isEmpty || _channel.isEmpty || _uid <= 0;
+  bool _refreshingToken = false;
+  Timer? _callDurationTimer;
+  int _secondsInCall = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final a = widget.args;
-
-    _appId = (a['agoraAppId'] ?? a['appId'] ?? '').toString();
+    _appId = (a['agoraAppId'] ?? a['appId'] ?? '').toString().trim();
     _channel = (a['channelName'] ?? a['channel'] ?? '').toString().trim();
     _uid = int.tryParse((a['uid'] ?? '0').toString()) ?? 0;
-    _token = (a['agoraToken'] ?? a['token'] ?? '').toString();
-    _callId = (a['callId'] ?? '').toString();
+    _token = (a['agoraToken'] ?? a['token'] ?? '').toString().trim();
+    _callId = (a['callId'] ?? '').toString().trim();
+    if (_callId != null && _callId!.isEmpty) _callId = null;
 
-    _initAgora();
-    _listenToCallEndedPush(); // ✅ Слушаем отмену звонка
+    if (_appId.isEmpty || _channel.isEmpty || _token.isEmpty) {
+      _badArgs = true;
+      _initializing = false;
+    } else {
+      _listenToCallEndedPush();
+      _initAgora();
+    }
   }
 
-  // ✅ Слушаем "тихий" пуш об отмене звонка прямо на этом экране
   void _listenToCallEndedPush() {
-    _fcmSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    _fcmSub?.cancel();
+    _fcmSub = FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
-      // Бэкенд KioskController.cs шлет type="call_ended"
       if (data['type'] == 'call_ended') {
-        _log('Получен пуш о завершении звонка. Закрываем экран.');
-        // Проверяем ID звонка, если он есть, чтобы не закрыть чужой (опционально)
         if (_callId != null && data['callId'] != null) {
           if (data['callId'].toString() != _callId) return;
         }
-        _onCallEnd();
+        _finishCall(reason: 'push:call_ended');
       }
     });
   }
@@ -84,75 +81,50 @@ class _CallPageState extends State<CallPage> {
   Future<void> _initAgora() async {
     try {
       if (_badArgs) return;
-
-      final res = await [
+      final perms = await [
         Permission.microphone,
         Permission.camera,
         if (!kIsWeb && Platform.isAndroid) Permission.notification,
       ].request();
 
-      if (res[Permission.microphone] != PermissionStatus.granted ||
-          res[Permission.camera] != PermissionStatus.granted) {
-        _log('Permissions denied');
+      if (perms[Permission.microphone] != PermissionStatus.granted ||
+          perms[Permission.camera] != PermissionStatus.granted) {
+        if (!mounted) return;
+        setState(() => _initializing = false);
         return;
       }
 
-      final engine = createAgoraRtcEngine();
+      _engine = createAgoraRtcEngine();
+      await _engine!.initialize(RtcEngineContext(
+        appId: _appId,
+        channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
+      ));
+      await _engine!.enableVideo();
+      await _engine!.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
 
-      await engine.initialize(
-        RtcEngineContext(
-          appId: _appId,
-          channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
-        ),
-      );
-
-      _engine = engine;
-
-      if (_forceTcp) await engine.setParameters('{"rtc.force_tcp":true}');
-      if (_enableProxy) {
-        await engine.setParameters('{"rtc.enable_proxy":true}');
-        await engine.setParameters('{"rtc.use_cloud_proxy":true}');
-      }
-
-      await engine.setVideoEncoderConfiguration(
-        const VideoEncoderConfiguration(
-          dimensions: VideoDimensions(width: 640, height: 360),
-          frameRate: 15,
-          bitrate: 400,
-        ),
-      );
-
-      engine.registerEventHandler(
+      _engine!.registerEventHandler(
         RtcEngineEventHandler(
-          onConnectionStateChanged: (connection, state, reason) async {
-            _log('connState=$state reason=$reason');
-            if (reason == ConnectionChangedReasonType.connectionChangedInvalidToken) {
-              await _refreshTokenAndRecover('reason=InvalidToken');
-            }
-          },
           onJoinChannelSuccess: (connection, elapsed) {
-            _log('join success');
-            if (!mounted) return;
+            if (!mounted || _finishing) return;
             setState(() {
               _joined = true;
-              _localUserJoined = true;
+              _localReady = true;
+              _initializing = false;
             });
+            _startCallTimer();
           },
           onUserJoined: (connection, remoteUid, elapsed) {
-            _log('remote joined uid=$remoteUid');
-            if (!mounted) return;
+            if (!mounted || _finishing) return;
             setState(() => _remoteUid = remoteUid);
           },
-          // ✅ ГЛАВНОЕ ИСПРАВЛЕНИЕ:
-          // Когда киоск отключается (finishCall), приходит это событие.
-          // Раньше мы просто удаляли видео, теперь мы завершаем звонок.
           onUserOffline: (connection, remoteUid, reason) {
-            _log('remote offline uid=$remoteUid -> FINISHING CALL');
-            _onCallEnd(); 
+            _finishCall(reason: 'agora:user_offline');
+          },
+          onLeaveChannel: (connection, stats) {
+            _finishCall(reason: 'agora:on_leave_channel');
           },
           onError: (err, msg) async {
-            _log('ERROR $err $msg');
-            final s = ('$msg').toLowerCase();
+            final s = (msg ?? '').toString().toLowerCase();
             if (s.contains('invalid token') || s.contains('token')) {
               await _refreshTokenAndRecover('onError token');
             }
@@ -166,257 +138,175 @@ class _CallPageState extends State<CallPage> {
         ),
       );
 
-      await engine.enableAudio();
-      await engine.enableVideo();
-      await engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
-      await engine.startPreview();
-
-      if (_token.isEmpty) {
-        _token = await ApiClient.getRtcToken(channel: _channel, uid: _uid);
-      }
-
-      await engine.joinChannel(
+      await _engine!.joinChannel(
         token: _token,
         channelId: _channel,
         uid: _uid,
         options: const ChannelMediaOptions(
           channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
           clientRoleType: ClientRoleType.clientRoleBroadcaster,
+          publishCameraTrack: true,
+          publishMicrophoneTrack: true,
+          autoSubscribeAudio: true,
+          autoSubscribeVideo: true,
         ),
       );
-    } catch (e) {
-      _log('init exception: $e');
+    } catch (_) {
+      if (mounted) setState(() => _initializing = false);
     }
   }
 
-  Future<void> _refreshTokenOnly(String why) async {
-    if (_refreshingToken) return;
-    _refreshingToken = true;
-    try {
-      final newToken = await ApiClient.getRtcToken(channel: _channel, uid: _uid);
-      _token = newToken;
-      await _engine?.renewToken(newToken);
-    } catch (e) {
-      _log('refreshTokenOnly error: $e');
-    } finally {
-      _refreshingToken = false;
-    }
-  }
-
-  Future<void> _refreshTokenAndRecover(String why) async {
-    final now = DateTime.now();
-    if (_lastTokenRefreshAt != null &&
-        now.difference(_lastTokenRefreshAt!) < const Duration(seconds: 5)) {
-      return;
-    }
-    _lastTokenRefreshAt = now;
-    if (_refreshingToken) return;
-    _refreshingToken = true;
-
-    try {
-      final newToken = await ApiClient.getRtcToken(channel: _channel, uid: _uid);
-      _token = newToken;
-      final engine = _engine;
-      if (engine == null) return;
-
-      await engine.renewToken(newToken);
-      if (!_joined) {
-        try {
-          await engine.leaveChannel();
-        } catch (_) {}
-        await engine.joinChannel(
-          token: _token,
-          channelId: _channel,
-          uid: _uid,
-          options: const ChannelMediaOptions(
-            channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
-            clientRoleType: ClientRoleType.clientRoleBroadcaster,
-          ),
-        );
-      }
-    } catch (e) {
-      _log('refreshTokenAndRecover error: $e');
-    } finally {
-      _refreshingToken = false;
-    }
-  }
-
-  // --- Действия пользователя ---
-
-  void _onToggleMute() {
-    setState(() {
-      _isMuted = !_isMuted;
+  void _startCallTimer() {
+    _callDurationTimer?.cancel();
+    _secondsInCall = 0;
+    _callDurationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _finishing) return;
+      setState(() => _secondsInCall++);
     });
-    _engine?.muteLocalAudioStream(_isMuted);
   }
 
-  void _onToggleVideo() {
-    setState(() {
-      _isVideoOff = !_isVideoOff;
+  String _formatDuration(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _refreshTokenOnly(String why) async { /* ... старый код ... */ }
+  Future<void> _refreshTokenAndRecover(String why) async { /* ... старый код ... */ }
+
+  // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ЗАВЕРШЕНИЯ 🔥
+  Future<void> _finishCall({required String reason}) async {
+    if (_finishing) return;
+    _finishing = true;
+
+    if (mounted) {
+      setState(() {
+        _joined = false;
+        _remoteUid = null;
+      });
+    }
+
+    // 1. Снимаем флаг "в звонке"
+    CallKitService.isCallAcceptedMode = false;
+
+    // 2. 🛑 ВКЛЮЧАЕМ БЛОКИРОВКУ (Игнор) на 3 секунды.
+    // Это предотвращает повторное открытие окна звонка в main.dart
+    CallKitService.ignoreActiveCalls = true;
+    Future.delayed(const Duration(seconds: 3), () {
+      CallKitService.ignoreActiveCalls = false;
     });
-    _engine?.muteLocalVideoStream(_isVideoOff);
-  }
 
-  void _onSwitchCamera() {
-    _engine?.switchCamera();
-  }
+    _callDurationTimer?.cancel();
+    _fcmSub?.cancel();
 
-  Future<void> _onCallEnd() async {
-    // Отписываемся от пушей
-    _fcmSubscription?.cancel();
-    
-    // Сбрасываем CallKit (чтобы не висел в шторке)
-    await FlutterCallkitIncoming.endAllCalls();
-    
+    // 3. Сбрасываем CallKit
     try {
-      // Пытаемся сообщить бэку (опционально, если есть метод)
-      // В вашем api_client есть endCall, можно дернуть его:
+      await FlutterCallkitIncoming.endAllCalls();
+    } catch (_) {}
+
+    // 4. API EndCall
+    try {
       if (_callId != null) {
-         try {
-           final cid = int.tryParse(_callId!);
-           if (cid != null) await ApiClient.endCall(cid);
-         } catch(_) {}
+        final cid = int.tryParse(_callId!) ?? 0;
+        if (cid > 0) ApiClient.endCall(cid).catchError((_) {});
       }
+    } catch (_) {}
 
-      await _engine?.leaveChannel();
-      await _engine?.release();
+    // 5. Agora
+    final engine = _engine;
+    _engine = null;
+    try {
+      if (engine != null) {
+        await Future.any([
+          engine.leaveChannel(),
+          Future.delayed(const Duration(milliseconds: 500)),
+        ]);
+        try { engine.release(); } catch (_) {}
+      }
     } catch (_) {}
 
     if (!mounted) return;
-    // Закрываем экран, возвращаемся назад
-    Navigator.of(context).pop();
+
+    // 6. Уходим на главную
+    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+  }
+
+  void _toggleMute() { setState(() => _isMuted = !_isMuted); _engine?.muteLocalAudioStream(_isMuted); }
+  void _toggleVideo() { setState(() => _isVideoOff = !_isVideoOff); _engine?.muteLocalVideoStream(_isVideoOff); }
+  void _switchCamera() { _engine?.switchCamera(); }
+
+  Widget _buildRemoteVideo() {
+    if (!_joined || _engine == null || _remoteUid == null) {
+      return Container(
+        color: Colors.black,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Colors.white54),
+            const SizedBox(height: 16),
+            Text(_initializing ? 'Подключение...' : 'Ожидание собеседника...', style: const TextStyle(color: Colors.white54)),
+          ],
+        ),
+      );
+    }
+    return AgoraVideoView(
+      controller: VideoViewController.remote(
+        rtcEngine: _engine!,
+        canvas: VideoCanvas(uid: _remoteUid),
+        connection: RtcConnection(channelId: _channel),
+      ),
+    );
+  }
+
+  Widget _buildLocalPreview() {
+    if (!_localReady || _engine == null) return const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 120, height: 160, color: Colors.black,
+        child: _isVideoOff ? const Center(child: Icon(Icons.videocam_off, color: Colors.white54)) : AgoraVideoView(
+          controller: VideoViewController(rtcEngine: _engine!, canvas: const VideoCanvas(uid: 0)),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
-    _fcmSubscription?.cancel();
-    _engine?.release();
+    WidgetsBinding.instance.removeObserver(this);
+    _callDurationTimer?.cancel();
+    _fcmSub?.cancel();
+    _engine?.release(); // fallback
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_badArgs) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: Text('Ошибка: Неверные данные звонка', style: TextStyle(color: Colors.white))),
-      );
-    }
+    if (_badArgs) return const Scaffold(backgroundColor: Colors.black, body: Center(child: Text('Error: Bad args', style: TextStyle(color: Colors.white))));
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // 1. Основной слой - Видео собеседника
-          _buildRemoteVideo(),
-
-          // 2. Локальное видео (PiP)
-          _buildLocalVideo(),
-
-          // 3. Панель управления (Кнопки)
-          _buildToolbar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRemoteVideo() {
-    if (_remoteUid != null && _engine != null) {
-      return AgoraVideoView(
-        controller: VideoViewController.remote(
-          rtcEngine: _engine!,
-          canvas: VideoCanvas(uid: _remoteUid),
-          connection: RtcConnection(channelId: _channel),
-        ),
-      );
-    } else {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      body: SafeArea(
+        child: Stack(
           children: [
-            const CircularProgressIndicator(color: Colors.white54),
-            const SizedBox(height: 20),
-            Text(
-              // Если joined = false, значит мы еще коннектимся
-              // Если joined = true, но remoteUid = null — значит ждем собеседника
-              _joined ? 'Ожидание подключения терминала...' : 'Подключение к серверу...',
-              style: const TextStyle(color: Colors.white54, fontSize: 16),
+            Positioned.fill(child: _buildRemoteVideo()),
+            Positioned(
+              left: 16, top: 16,
+              child: Text(_joined ? 'В звонке • ${_formatDuration(_secondsInCall)}' : 'Соединение...', style: const TextStyle(color: Colors.white70, fontSize: 16)),
             ),
-          ],
-        ),
-      );
-    }
-  }
-
-  Widget _buildLocalVideo() {
-    if (!_localUserJoined || _engine == null) return const SizedBox.shrink();
-
-    return Positioned(
-      right: 16,
-      top: 50 + MediaQuery.of(context).viewPadding.top,
-      width: 110,
-      height: 150,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white24),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 8),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: _isVideoOff
-              ? Container(
-                  color: Colors.grey[900],
-                  child: const Center(
-                    child: Icon(Icons.videocam_off, color: Colors.white54),
-                  ),
-                )
-              : AgoraVideoView(
-                  controller: VideoViewController(
-                    rtcEngine: _engine!,
-                    canvas: const VideoCanvas(uid: 0),
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToolbar() {
-    return Positioned(
-      bottom: 40,
-      left: 0,
-      right: 0,
-      child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _ToolButton(
-              onTap: _onToggleMute,
-              icon: _isMuted ? Icons.mic_off : Icons.mic,
-              backgroundColor: _isMuted ? Colors.white : Colors.white24,
-              iconColor: _isMuted ? Colors.black : Colors.white,
-            ),
-            _ToolButton(
-              onTap: _onCallEnd,
-              icon: Icons.call_end,
-              backgroundColor: Colors.redAccent,
-              iconColor: Colors.white,
-              size: 72,
-            ),
-            _ToolButton(
-              onTap: _onToggleVideo,
-              icon: _isVideoOff ? Icons.videocam_off : Icons.videocam,
-              backgroundColor: _isVideoOff ? Colors.white : Colors.white24,
-              iconColor: _isVideoOff ? Colors.black : Colors.white,
-            ),
-             _ToolButton(
-              onTap: _onSwitchCamera,
-              icon: Icons.cameraswitch,
-              backgroundColor: Colors.white24,
-              iconColor: Colors.white,
+            Positioned(right: 16, top: 56, child: _buildLocalPreview()),
+            Positioned(
+              left: 0, right: 0, bottom: 24,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _CircleBtn(icon: _isMuted ? Icons.mic_off : Icons.mic, onTap: _toggleMute, background: Colors.white10, iconColor: Colors.white),
+                  _CircleBtn(icon: Icons.call_end, onTap: () => _finishCall(reason: 'user_hangup'), background: Colors.red, iconColor: Colors.white, size: 72),
+                  _CircleBtn(icon: _isVideoOff ? Icons.videocam_off : Icons.videocam, onTap: _toggleVideo, background: Colors.white10, iconColor: Colors.white),
+                  _CircleBtn(icon: Icons.cameraswitch, onTap: _switchCamera, background: Colors.white10, iconColor: Colors.white),
+                ],
+              ),
             ),
           ],
         ),
@@ -425,34 +315,14 @@ class _CallPageState extends State<CallPage> {
   }
 }
 
-class _ToolButton extends StatelessWidget {
-  final VoidCallback onTap;
-  final IconData icon;
-  final Color backgroundColor;
-  final Color iconColor;
-  final double size;
-
-  const _ToolButton({
-    required this.onTap,
-    required this.icon,
-    this.backgroundColor = Colors.white24,
-    this.iconColor = Colors.white,
-    this.size = 56,
-  });
-
+class _CircleBtn extends StatelessWidget {
+  final IconData icon; final VoidCallback onTap; final Color background; final Color iconColor; final double size;
+  const _CircleBtn({required this.icon, required this.onTap, required this.background, required this.iconColor, this.size = 56});
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: iconColor, size: size * 0.5),
-      ),
+      child: Container(width: size, height: size, decoration: BoxDecoration(color: background, shape: BoxShape.circle), child: Icon(icon, color: iconColor, size: size * 0.48)),
     );
   }
 }
