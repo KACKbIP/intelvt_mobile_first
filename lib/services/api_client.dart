@@ -169,7 +169,7 @@ class ParentDashboardData {
 /// ====== API CLIENT (DIO) ======
 
 class ApiClient {
-  static const String _baseUrl = 'https://dc3ccfbb2514.ngrok-free.app';
+  static const String _baseUrl = 'https://api.intelvt.kz';
   static const String _authBase = '$_baseUrl/api/mobile';
 
   static const _storage = FlutterSecureStorage();
