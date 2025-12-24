@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart'; 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-
+import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import '../navigation.dart';
 import '../screens/login_page.dart';
 
@@ -494,57 +494,40 @@ class ApiClient {
     String? deviceId,
     String? deviceName,
   }) async {
-    final token = await getAccessToken();
-    // Если токена нет, просто молча выходим
-    if (token == null || token.isEmpty) return;
+    final token = await FirebaseMessaging.instance.getToken();
+    String? voipToken;
 
-    final fcm = await FirebaseMessaging.instance.getToken();
-    if (fcm == null || fcm.isEmpty) return;
+    // Для iOS получаем специальный VoIP токен
+    if (Platform.isIOS) {
+      voipToken = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
+    }
 
-    final platform = Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
-    final name = deviceName ?? 'Android App';
+    final accessToken = await getAccessToken();
+    if (accessToken == null) return;
 
     // Interceptor добавит заголовок Authorization сам
     try {
       await _dio.post(
         '/api/mobile/devices/register',
         data: {
-          'platform': platform,
-          'pushToken': fcm,
-          'deviceId': deviceId,
-          'deviceName': name,
+          'platform': Platform.isAndroid ? 'android' : 'ios',
+          'pushToken': token,
+          'voipToken': voipToken, // Отправляем VoIP токен на сервер
+          'deviceName': deviceName ?? (Platform.isAndroid ? 'Android Device' : 'iOS Device'),
         },
+        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
       );
-    } catch (_) {
-      // Молча игнорируем ошибки обновления токена в фоне
+      print('Device registered successfully. VoIP: ${voipToken != null}');
+    } catch (e) {
+      print('Error registering device: $e');
     }
   }
 
-  static void listenTokenRefresh({
-    String? deviceId,
-    String? deviceName,
-  }) {
-    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
-      final access = await getAccessToken();
-      if (access == null || access.isEmpty) return;
-
-      final platform = Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'unknown');
-      final name = deviceName ?? (Platform.isAndroid ? 'Android' : 'iOS');
-
-      try {
-        await _dio.post(
-          '$_baseUrl/api/mobile/devices/register',
-          data: {
-            'platform': platform,
-            'pushToken': newToken,
-            'deviceId': deviceId,
-            'deviceName': name,
-          },
-        );
-      } catch (_) {}
+  static void listenTokenRefresh({String? deviceName}) {
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      registerDevice(deviceName: deviceName);
     });
   }
-
   // ---------- AGORA TOKEN ----------
 
   static Future<String> getRtcToken({

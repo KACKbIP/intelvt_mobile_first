@@ -1,14 +1,25 @@
+import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '/services/api_client.dart';
 
 class PushDeviceService {
   Future<void> registerDevice() async {
-    await FirebaseMessaging.instance.requestPermission();
+    // Запрашиваем разрешения на пуши (важно для iOS)
+    NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
 
-    final token = await FirebaseMessaging.instance.getToken();
-    print('FCM TOKEN => $token');
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      final token = await FirebaseMessaging.instance.getToken();
+      print('FCM TOKEN => $token');
 
-    await ApiClient.registerDevice(deviceName: 'Parent Android');
-    ApiClient.listenTokenRefresh(deviceName: 'Parent Android');
+      // Регистрируем устройство (платформа определится внутри ApiClient)
+      await ApiClient.registerDevice();
+      ApiClient.listenTokenRefresh();
+    } else {
+      print('User declined push permissions');
+    }
   }
 }
