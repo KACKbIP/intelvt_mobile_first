@@ -38,7 +38,6 @@ class CallKitService {
       id: callId,
       nameCaller: data['fromName'] ?? 'IntelVT',
       appName: 'IntelVT',
-      avatar: 'https://i.pravatar.cc/100',
       handle: 'Video Call',
       type: 1, // 0 - Audio, 1 - Video
       extra: data,

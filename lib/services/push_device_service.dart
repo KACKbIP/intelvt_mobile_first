@@ -16,7 +16,9 @@ class PushDeviceService {
       print('FCM TOKEN => $token');
 
       // Регистрируем устройство (платформа определится внутри ApiClient)
-      await ApiClient.registerDevice();
+      await ApiClient.registerDevice(
+    deviceName: Platform.isAndroid ? 'Parent Android' : 'Parent iOS'
+  );
       ApiClient.listenTokenRefresh();
     } else {
       print('User declined push permissions');

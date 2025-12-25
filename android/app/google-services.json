@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "116599084408",
-    "project_id": "intelvt",
-    "storage_bucket": "intelvt.firebasestorage.app"
+    "project_number": "1096463697014",
+    "project_id": "intelvt-mobile-first",
+    "storage_bucket": "intelvt-mobile-first.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:116599084408:android:abf39878fc73400563248d",
+        "mobilesdk_app_id": "1:1096463697014:android:dc5ef3f32a1607bb978b57",
         "android_client_info": {
           "package_name": "com.example.intelvt_mobile_first"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyD1G5LtPNqetoB7yCyRh0i99C53cNxfM1k"
+          "current_key": "AIzaSyA5_GMa2fP_Hmo00DsQ1myJ0OQ3L6dPONg"
         }
       ],
       "services": {

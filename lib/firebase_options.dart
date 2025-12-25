@@ -51,19 +51,19 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD1G5LtPNqetoB7yCyRh0i99C53cNxfM1k',
-    appId: '1:116599084408:android:abf39878fc73400563248d',
-    messagingSenderId: '116599084408',
-    projectId: 'intelvt',
-    storageBucket: 'intelvt.firebasestorage.app',
+    apiKey: 'AIzaSyA5_GMa2fP_Hmo00DsQ1myJ0OQ3L6dPONg',
+    appId: '1:1096463697014:android:dc5ef3f32a1607bb978b57',
+    messagingSenderId: '1096463697014',
+    projectId: 'intelvt-mobile-first',
+    storageBucket: 'intelvt-mobile-first.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDnJWGpgULjZeyTXje5-2rPkCkLH4ot4Ew',
-    appId: '1:116599084408:ios:1aa1961ec976f20f63248d',
-    messagingSenderId: '116599084408',
-    projectId: 'intelvt',
-    storageBucket: 'intelvt.firebasestorage.app',
+    apiKey: 'AIzaSyBmkoVgYmTQO8Yl9nAk9G6TFUzqc9l8dOA',
+    appId: '1:1096463697014:ios:1df37b63a5f5ec71978b57',
+    messagingSenderId: '1096463697014',
+    projectId: 'intelvt-mobile-first',
+    storageBucket: 'intelvt-mobile-first.firebasestorage.app',
     iosBundleId: 'com.example.intelvtMobileFirst',
   );
 
