@@ -5,6 +5,8 @@ import 'notifications_page.dart';
 import 'profile_page.dart';
 import '/services/permissions_service.dart';
 import '/services/api_client.dart';
+import 'dart:io'; // Обязательно добавь для Platform
+import 'package:device_info_plus/device_info_plus.dart'; // Полезно для имен
 
 class MainNavigationPage extends StatefulWidget {
   final int userId;
@@ -49,28 +51,39 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   }
 
   Future<void> _checkPermissions() async {
-    // 1. Обновляем токен "тихо" (без всплывающих окон)
-    // Это нужно, чтобы сервер всегда знал актуальный адрес устройства
-    try {
-      await ApiClient.registerDevice(deviceName: 'Parent Android'); 
-    } catch (e) {
-      // Логируем ошибку только в консоль разработчика
-      debugPrint("⚠️ Не удалось обновить токен: $e");
-    }
+  // 1. Регистрируем устройство с учетом платформы
+  try {
+    String deviceDisplayName = 'Unknown Device';
     
+    if (Platform.isIOS) {
+      deviceDisplayName = 'iPhone User';
+    } else if (Platform.isAndroid) {
+      deviceDisplayName = 'Android Parent';
+    }
+
+    // Вызываем регистрацию ОДИН раз
+    await ApiClient.registerDevice(deviceName: deviceDisplayName); 
+    
+  } catch (e) {
+    debugPrint("⚠️ Не удалось обновить токен: $e");
+  }
+
+  // 2. Специфические разрешения только для Android
+  if (Platform.isAndroid) {
     final service = PermissionsService();
     
-    // 2. Просим игнорировать оптимизацию батареи
+    // Просим игнорировать оптимизацию батареи
     await service.requestBatteryOptimization();
     
-    // 3. Просим разрешение рисовать поверх окон (для CallKit на некоторых Android)
+    // Просим разрешение рисовать поверх окон
     await service.requestSystemAlertWindow();
 
-    // 4. Если это Xiaomi - просим включить автозапуск
+    // Если это Xiaomi/Meizu/Huawei - просим включить автозапуск
     if (mounted) {
       await service.openAutoStartSettings(context);
     }
   }
+}
 
   @override
   Widget build(BuildContext context) {

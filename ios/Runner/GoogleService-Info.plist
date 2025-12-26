@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyDnJWGpgULjZeyTXje5-2rPkCkLH4ot4Ew</string>
+	<string>AIzaSyBmkoVgYmTQO8Yl9nAk9G6TFUzqc9l8dOA</string>
 	<key>GCM_SENDER_ID</key>
-	<string>116599084408</string>
+	<string>1096463697014</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.company.intelvtMobileFirst</string>
+	<string>com.ainur.intelvtMobileFirst</string>
 	<key>PROJECT_ID</key>
-	<string>intelvt</string>
+	<string>intelvt-mobile-first</string>
 	<key>STORAGE_BUCKET</key>
-	<string>intelvt.firebasestorage.app</string>
+	<string>intelvt-mobile-first.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:116599084408:ios:054168902c94d57463248d</string>
+	<string>1:1096463697014:ios:2b8bedf59735a4ca978b57</string>
 </dict>
 </plist>

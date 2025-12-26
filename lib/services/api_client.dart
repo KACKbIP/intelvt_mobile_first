@@ -8,6 +8,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import '../navigation.dart';
 import '../screens/login_page.dart';
+import 'package:flutter_callkit_incoming/entities/entities.dart';
+import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import 'package:uuid/uuid.dart';
 
 /// ====== АВТОРИЗАЦИЯ ======
 
@@ -497,11 +500,22 @@ class ApiClient {
     final token = await FirebaseMessaging.instance.getToken();
     String? voipToken;
 
-    // Для iOS получаем специальный VoIP токен
-    if (Platform.isIOS) {
-      voipToken = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
-    }
 
+  if (Platform.isIOS) {
+    
+
+    try {
+      
+      
+  voipToken = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
+  print('--- МОЙ НОВЫЙ VOIP ТОКЕН ДЛЯ CURL ---');
+  print(voipToken); // Скопируйте его отсюда
+  print('-------------------------------------');
+
+    } catch (e) {
+      print("❌ Ошибка при получении токена: $e");
+    }
+  }
     final accessToken = await getAccessToken();
     if (accessToken == null) return;
 

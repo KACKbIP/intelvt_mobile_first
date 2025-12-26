@@ -44,7 +44,6 @@ Future<void> main() async {
   } catch (e) {
     debugPrint("Error checking active calls: $e");
   }
-
   runApp(MyApp(initialCallArgs: _initialCallArgs));
 }
 
