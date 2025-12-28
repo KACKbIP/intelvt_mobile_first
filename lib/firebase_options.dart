@@ -25,9 +25,15 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        return macos;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for macos - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -41,48 +47,28 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCF6DTchXULQmLWNRsOnEgdFLEhbaGjAGQ',
-    appId: '1:116599084408:web:d014c4386eb0c8bc63248d',
-    messagingSenderId: '116599084408',
-    projectId: 'intelvt',
-    authDomain: 'intelvt.firebaseapp.com',
-    storageBucket: 'intelvt.firebasestorage.app',
-    measurementId: 'G-PG2PE3K7S3',
+    apiKey: 'AIzaSyAfZ-Dxvp7VJSzIj4O7s-qXAW8MKdG0cDE',
+    appId: '1:1020920479762:web:5b7e8e232961a4efabd8cb',
+    messagingSenderId: '1020920479762',
+    projectId: 'intelvtmain',
+    authDomain: 'intelvtmain.firebaseapp.com',
+    storageBucket: 'intelvtmain.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA5_GMa2fP_Hmo00DsQ1myJ0OQ3L6dPONg',
-    appId: '1:1096463697014:android:dc5ef3f32a1607bb978b57',
-    messagingSenderId: '1096463697014',
-    projectId: 'intelvt-mobile-first',
-    storageBucket: 'intelvt-mobile-first.firebasestorage.app',
+    apiKey: 'AIzaSyC2kJ7y4aWl-42imvelx70bXZ3B72nuZdE',
+    appId: '1:1020920479762:android:9e8a38999fd063d4abd8cb',
+    messagingSenderId: '1020920479762',
+    projectId: 'intelvtmain',
+    storageBucket: 'intelvtmain.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBmkoVgYmTQO8Yl9nAk9G6TFUzqc9l8dOA',
-    appId: '1:1096463697014:ios:1df37b63a5f5ec71978b57',
-    messagingSenderId: '1096463697014',
-    projectId: 'intelvt-mobile-first',
-    storageBucket: 'intelvt-mobile-first.firebasestorage.app',
-    iosBundleId: 'com.example.intelvtMobileFirst',
-  );
-
-  static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDnJWGpgULjZeyTXje5-2rPkCkLH4ot4Ew',
-    appId: '1:116599084408:ios:1aa1961ec976f20f63248d',
-    messagingSenderId: '116599084408',
-    projectId: 'intelvt',
-    storageBucket: 'intelvt.firebasestorage.app',
-    iosBundleId: 'com.example.intelvtMobileFirst',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyCF6DTchXULQmLWNRsOnEgdFLEhbaGjAGQ',
-    appId: '1:116599084408:web:7cbf86103bc75ce563248d',
-    messagingSenderId: '116599084408',
-    projectId: 'intelvt',
-    authDomain: 'intelvt.firebaseapp.com',
-    storageBucket: 'intelvt.firebasestorage.app',
-    measurementId: 'G-0ZZR4KW5SL',
+    apiKey: 'AIzaSyBU1lZ8Q4pGpdMmzByJPf-9CLPi9rDjBHs',
+    appId: '1:1020920479762:ios:c0363a40c41bfadcabd8cb',
+    messagingSenderId: '1020920479762',
+    projectId: 'intelvtmain',
+    storageBucket: 'intelvtmain.firebasestorage.app',
+    iosBundleId: 'intelvt.iphone',
   );
 }
