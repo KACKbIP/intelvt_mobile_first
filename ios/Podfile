@@ -39,5 +39,24 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    
+    # --- НАЧАЛО ВСТАВКИ ---
+    # Включаем макросы для permission_handler
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        
+        # Разрешаем Камеру
+        'PERMISSION_CAMERA=1',
+        
+        # Разрешаем Микрофон
+        'PERMISSION_MICROPHONE=1',
+        
+        # На всякий случай, если проверяем статус уведомлений через этот пакет
+        'PERMISSION_NOTIFICATIONS=1',
+      ]
+    end
+    # --- КОНЕЦ ВСТАВКИ ---
+
   end
 end

@@ -19,8 +19,12 @@ Map<String, dynamic>? _initialCallArgs;
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  print('🌙 [Background] Push received: ${message.data}');
+  
   final data = message.data;
-  if (data['type'] == 'incoming_call') {
+  // Проверяем тип пуша, чтобы не реагировать на обычные сообщения как на звонок
+  // (Адаптируй под свои ключи, если type приходит в другом месте)
+  if (data['type'] == 'incoming_call' || (data['extra'] != null && data['extra'].toString().contains('incoming_call'))) {
     await CallKitService.showIncomingCall(data);
   } else if (data['type'] == 'call_ended') {
     await FlutterCallkitIncoming.endAllCalls();
@@ -30,20 +34,28 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Инициализация сервиса звонков
+  CallKitService.init();
+  
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   
+  // 🔥 ХОЛОДНЫЙ СТАРТ: Проверяем, было ли приложение открыто кликом по "Принять"
   try {
     var calls = await FlutterCallkitIncoming.activeCalls();
     if (calls is List && calls.isNotEmpty) {
+      print('❄️ [Main] Found active calls on cold start: $calls');
       final lastCall = calls.last;
       if (lastCall['extra'] != null) {
         _initialCallArgs = Map<String, dynamic>.from(lastCall['extra']);
         CallKitService.isCallAcceptedMode = true; 
+        print('❄️ [Main] Restored args: $_initialCallArgs');
       }
     }
   } catch (e) {
     debugPrint("Error checking active calls: $e");
   }
+  
   runApp(MyApp(initialCallArgs: _initialCallArgs));
 }
 
@@ -61,7 +73,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    CallKitService.init();
     _setupForegroundPushListener();
   }
 
@@ -73,24 +84,26 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    print('📱 Lifecycle changed: $state');
     if (state == AppLifecycleState.resumed) {
       _checkActiveCallsOnResume();
     }
   }
 
   Future<void> _checkActiveCallsOnResume() async {
-    // 🔥 ВАЖНО: Если мы в "кулдауне" (только что положили трубку),
-    // то игнорируем наличие активного звонка в CallKit
     if (CallKitService.ignoreActiveCalls) {
       debugPrint('[MAIN] Ignoring active calls (cooldown)');
       return;
     }
 
+    // Небольшая задержка, чтобы CallKit успел обновить статус
     await Future.delayed(const Duration(milliseconds: 500));
     try {
       var calls = await FlutterCallkitIncoming.activeCalls();
       if (calls is List && calls.isNotEmpty) {
         final lastCall = calls.last;
+        print('⚡ [Resume] Active call found: ${lastCall['id']}');
+        
         if (lastCall['extra'] != null) {
           final args = Map<String, dynamic>.from(lastCall['extra']);
           
@@ -101,16 +114,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           });
 
           if (!isAlreadyInCall) {
+             print('⚡ [Resume] Navigating to /call');
              CallKitService.isCallAcceptedMode = true;
              navigatorKey.currentState?.pushNamed('/call', arguments: args);
+          } else {
+             print('⚡ [Resume] Already in /call screen');
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      print('Error on resume check: $e');
+    }
   }
 
   void _setupForegroundPushListener() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      print('☀️ [Foreground] Push received: ${message.data}');
       final data = message.data;
       if (data['type'] == 'incoming_call') {
         await CallKitService.showIncomingCall(data);
@@ -138,6 +157,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           final args = (ModalRoute.of(context)?.settings.arguments is Map)
               ? Map<String, dynamic>.from(ModalRoute.of(context)?.settings.arguments as Map)
               : <String, dynamic>{};
+          print('🖥️ [Route] Opening /call with args: $args');
           return CallPage(args: args);
         }
       },
@@ -162,27 +182,29 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
   }
 
   Future<void> _bootstrap() async {
-    // 🔥 ФИКС: Если мы только что сбросили звонок, игнорируем старые аргументы!
     if (CallKitService.ignoreActiveCalls) {
       debugPrint('[AuthCheck] Ignoring start args because of cooldown');
       await _checkAuth();
       return;
     }
 
-    // ХОЛОДНЫЙ СТАРТ ЗВОНКА
+    // ХОЛОДНЫЙ СТАРТ ЗВОНКА (Приложение было закрыто)
     if (widget.initialCallArgs != null || CallKitService.isCallAcceptedMode) {
+      print('🚀 [AuthCheck] Cold start detected, going to call immediately');
       final args = widget.initialCallArgs ?? {}; 
+      
+      // Используем addPostFrameCallback, чтобы навигация сработала после построения виджета
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushReplacementNamed('/call', arguments: args);
       });
       return;
     }
 
-    // Обычная авторизация
     await _checkAuth();
   }
 
   Future<void> _checkAuth() async {
+    // Твоя логика авторизации без изменений
     final token = await ApiClient.getAccessToken();
     if (token == null || token.isEmpty) {
       _navTo(const LoginPage());

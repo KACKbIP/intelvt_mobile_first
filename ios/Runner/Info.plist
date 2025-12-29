@@ -38,9 +38,7 @@
 	<array>
 		<string>fetch</string>
 		<string>audio</string>
-		<string>processing</string>
 		<string>remote-notification</string>
-		<string>push-to-talk</string>
 		<string>voip</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
