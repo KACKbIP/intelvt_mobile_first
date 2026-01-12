@@ -57,7 +57,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyC2kJ7y4aWl-42imvelx70bXZ3B72nuZdE',
-    appId: '1:1020920479762:android:9e8a38999fd063d4abd8cb',
+    appId: '1:1020920479762:android:ef7d1c5df686a327abd8cb',
     messagingSenderId: '1020920479762',
     projectId: 'intelvtmain',
     storageBucket: 'intelvtmain.firebasestorage.app',
@@ -71,4 +71,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'intelvtmain.firebasestorage.app',
     iosBundleId: 'intelvt.iphone',
   );
+
 }
