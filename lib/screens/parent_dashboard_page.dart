@@ -133,6 +133,7 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                       _SoldierCard(
                         name: soldier.name,
                         unit: soldier.unit,
+                        uniqueNumber: soldier.uniqueNumber,
                         status: soldier.balanceTenge > 0
                             ? 'Можно звонить'
                             : 'Баланс нулевой',
@@ -144,6 +145,7 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                       const SizedBox(height: 12),
 
                       _BalanceCard(
+                        uniqueNumber: soldier.uniqueNumber,
                         balanceTenge: soldier.balanceTenge,
                         tariffPerMinute: soldier.tariffPerMinute,
                         minutesUsedToday: soldier.minutesUsedToday,
@@ -246,6 +248,7 @@ class _ParentCard extends StatelessWidget {
 class _SoldierCard extends StatelessWidget {
   final String name;
   final String unit;
+  final String uniqueNumber; // ✅ Новое поле
   final String? status;
   final Color? statusColor;
   final VoidCallback? onEditName;
@@ -253,6 +256,7 @@ class _SoldierCard extends StatelessWidget {
   const _SoldierCard({
     required this.name,
     required this.unit,
+    required this.uniqueNumber, // ✅ Обязательный параметр
     this.status,
     this.statusColor,
     this.onEditName,
@@ -279,6 +283,7 @@ class _SoldierCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // --- ИМЯ И РЕДАКТИРОВАНИЕ ---
                   Row(
                     children: [
                       Expanded(
@@ -295,15 +300,35 @@ class _SoldierCard extends StatelessWidget {
                           icon: const Icon(Icons.edit, size: 20),
                           tooltip: 'Изменить имя',
                           onPressed: onEditName,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          style: IconButton.styleFrom(
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                     ],
                   ),
                   const SizedBox(height: 4),
+                  
+                  // --- ПОДРАЗДЕЛЕНИЕ ---
                   Text(
                     unit,
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
+                  
+                  // --- ✅ УНИКАЛЬНЫЙ НОМЕР ---
+                  const SizedBox(height: 2),
+                  Text(
+                    'ID: $uniqueNumber',
+                    style: TextStyle(
+                      fontSize: 12, 
+                      color: Colors.grey.withOpacity(0.8)
+                    ),
+                  ),
+
                   const SizedBox(height: 8),
+
+                  // --- СТАТУС ---
                   if (status != null && status!.isNotEmpty) ...[
                     Row(
                       children: [
@@ -339,24 +364,34 @@ class _SoldierCard extends StatelessWidget {
 }
 
 class _BalanceCard extends StatelessWidget {
+  final String uniqueNumber; // ✅ Используем уникальный номер солдата
   final int balanceTenge;
   final int tariffPerMinute;
   final int minutesUsedToday;
   final String? nextLimitDate;
 
   const _BalanceCard({
+    required this.uniqueNumber, // ✅ Обязательный параметр
     required this.balanceTenge,
     required this.tariffPerMinute,
     required this.minutesUsedToday,
     this.nextLimitDate,
   });
 
-  static const String _kaspiUrl = 'https://kaspi.kz';
   static const Color _kaspiRed = Color(0xFFE31E24);
 
   Future<void> _openKaspi() async {
-    final uri = Uri.parse(_kaspiUrl);
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    // ✅ Подставляем uniqueNumber в ссылку Kaspi
+    final String url = 'https://kaspi.kz/pay/ZHalin?18392=$uniqueNumber';
+    
+    final uri = Uri.parse(url);
+    
+    // mode: LaunchMode.externalApplication открывает именно приложение Kaspi
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      debugPrint('Не удалось открыть Kaspi: $url');
+    }
   }
 
   @override
