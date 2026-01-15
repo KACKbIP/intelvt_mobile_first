@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart'; // ✅ Импорт маски
 import '../services/api_client.dart';
 import 'code_confirm_page.dart';
 
@@ -11,32 +12,22 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController();
+  
+  // ✅ Добавляем маску, точно такую же, как на LoginPage
+  final _phoneMask = MaskTextInputFormatter(
+    mask: '+7 (###) ###-##-##',
+    filter: {'#': RegExp(r'[0-9]')},
+  );
+
   bool _isLoading = false;
 
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  String _normalizePhone(String raw) {
-    final digits = raw.replaceAll(RegExp(r'\D'), '');
-
-    if (digits.length == 11 && digits.startsWith('7')) {
-      // 7XXXXXXXXXX → +7XXXXXXXXXX
-      return '+$digits';
+  /// Нормализуем номер для API: "+7 (701) 123-45-67" -> "+77011234567"
+  String _normalizePhone() {
+    final digits = _phoneMask.getUnmaskedText(); // Получаем только цифры (10 штук)
+    if (digits.length != 10) {
+      throw const FormatException('Номер введён не полностью');
     }
-    if (digits.length == 11 && digits.startsWith('8')) {
-      // 8XXXXXXXXXX → +7XXXXXXXXXX
-      return '+7${digits.substring(1)}';
-    }
-    if (digits.length == 10) {
-      // 701XXXXXXX → +7701XXXXXXX
-      return '+7$digits';
-    }
-
-    throw AuthException('Некорректный формат номера телефона');
+    return '+7$digits';
   }
 
   Future<void> _onSendCodePressed() async {
@@ -45,7 +36,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     setState(() => _isLoading = true);
 
     try {
-      final normalizedPhone = _normalizePhone(_phoneController.text.trim());
+      final normalizedPhone = _normalizePhone();
 
       // Шлём код для восстановления пароля
       await ApiClient.sendPasswordResetCode(phone: normalizedPhone);
@@ -58,27 +49,33 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         ),
       );
 
-      // Переходим на страницу ввода кода в режиме восстановления
+      // Переходим на страницу ввода кода
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => CodeConfirmPage(
             phone: normalizedPhone,
-            password: '',              // пароль пока не нужен
-            isForPasswordReset: true,  // 👈 важный флаг
+            password: '',              // пароль здесь не нужен
+            isForPasswordReset: true,  // флаг восстановления
           ),
         ),
       );
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.orange),
       );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Ошибка при отправке кода. Попробуйте позже.'),
+          backgroundColor: Colors.red,
         ),
       );
     } finally {
@@ -105,38 +102,45 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 'Введите номер телефона, привязанный к аккаунту. '
                 'Мы отправим SMS с кодом для восстановления пароля.',
                 textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 24),
+              
+              // ✅ Поле с маской
               TextFormField(
-                controller: _phoneController,
                 keyboardType: TextInputType.phone,
+                inputFormatters: [_phoneMask], // Подключаем маску
                 decoration: const InputDecoration(
                   labelText: 'Телефон',
-                  hintText: '+7 777 123 45 67',
+                  hintText: '+7 (777) 123-45-67',
+                  prefixIcon: Icon(Icons.phone),
+                  border: OutlineInputBorder(),
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Введите номер телефона';
-                  }
-                  final digits = value.replaceAll(RegExp(r'\D'), '');
-                  if (digits.length < 10) {
-                    return 'Слишком короткий номер';
+                  // Проверяем, заполнена ли маска полностью
+                  if (!_phoneMask.isFill()) {
+                    return 'Введите полный номер телефона';
                   }
                   return null;
                 },
               ),
+              
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
+                height: 50,
+                child: FilledButton(
                   onPressed: _isLoading ? null : _onSendCodePressed,
                   child: _isLoading
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
-                      : const Text('Отправить код'),
+                      : const Text('Отправить код', style: TextStyle(fontSize: 16)),
                 ),
               ),
             ],

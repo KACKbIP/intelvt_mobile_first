@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart'; // Не забудь добавить этот пакет в pubspec.yaml
 
 import '../services/api_client.dart';
 import 'login_page.dart';
@@ -32,6 +33,21 @@ class _ProfilePageState extends State<ProfilePage> {
     _phone = widget.phone ?? '+7 XXX XXX XX XX';
   }
 
+  // ==================== SUPPORT (TELEGRAM) ====================
+  Future<void> _openSupport() async {
+    final Uri url = Uri.parse('https://t.me/intelvt?direct');
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw Exception('Не удалось открыть Telegram');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при открытии ссылки: $e')),
+      );
+    }
+  }
+
   // ==================== LOGOUT ====================
   Future<void> _logout() async {
     if (_isLogoutProcessing) return;
@@ -54,6 +70,61 @@ class _ProfilePageState extends State<ProfilePage> {
           .showSnackBar(const SnackBar(content: Text('Ошибка при выходе')));
     } finally {
       if (mounted) setState(() => _isLogoutProcessing = false);
+    }
+  }
+
+  // ==================== DELETE ACCOUNT (APPLE REQUIREMENT) ====================
+  Future<void> _deleteAccount() async {
+    // 1. Показываем диалог подтверждения
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удаление аккаунта'),
+        content: const Text(
+          'Вы уверены? Ваш аккаунт и все данные будут безвозвратно удалены. Это действие нельзя отменить.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Удалить навсегда'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // 2. Запускаем процесс удаления
+    if (!mounted) return;
+    setState(() => _isLogoutProcessing = true); // Используем индикатор загрузки
+
+    try {
+      // Внимание: Убедись, что метод deleteAccount добавлен в ApiClient!
+      await ApiClient.deleteAccount();
+
+      if (!mounted) return;
+
+      // 3. Переход на логин после успеха
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (_) => false,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Аккаунт успешно удален')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLogoutProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка: $e')),
+      );
     }
   }
 
@@ -236,18 +307,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ==================== SETTINGS ====================
-  void _openSettings() {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text("Здесь будут настройки"),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
@@ -267,6 +326,7 @@ class _ProfilePageState extends State<ProfilePage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // КАРТОЧКА ПРОФИЛЯ
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
@@ -276,17 +336,19 @@ class _ProfilePageState extends State<ProfilePage> {
                   CircleAvatar(
                     radius: 30,
                     child: Text(
-                      _fullName[0].toUpperCase(),
+                      _fullName.isNotEmpty ? _fullName[0].toUpperCase() : '?',
                       style: const TextStyle(fontSize: 24),
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_fullName, style: t.textTheme.titleMedium),
-                      Text(_phone, style: t.textTheme.bodyMedium),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_fullName, style: t.textTheme.titleMedium),
+                        Text(_phone, style: t.textTheme.bodyMedium),
+                      ],
+                    ),
                   )
                 ],
               ),
@@ -294,6 +356,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           const SizedBox(height: 24),
 
+          // КАРТОЧКА ДЕЙСТВИЙ
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Column(
@@ -309,16 +372,36 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: const Text("Изменить пароль"),
                   onTap: _changePassword,
                 ),
-                const Divider(height: 0),                
+                const Divider(height: 0),
                 ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.red),
-                  title: const Text(
-                    "Выйти",
-                    style: TextStyle(color: Colors.red),
-                  ),
+                  leading: const Icon(Icons.support_agent, color: Colors.blue),
+                  title: const Text("Служба поддержки"),
+                  onTap: _openSupport,
+                ),
+                const Divider(height: 0),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text("Выйти"),
                   onTap: _logout,
                 ),
               ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // КНОПКА УДАЛЕНИЯ АККАУНТА (Отдельно, чтобы не нажать случайно)
+          Card(
+            color: Colors.red.shade50,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text(
+                "Удалить аккаунт",
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text("Безвозвратное удаление всех данных"),
+              onTap: _isLogoutProcessing ? null : _deleteAccount,
             ),
           ),
         ],

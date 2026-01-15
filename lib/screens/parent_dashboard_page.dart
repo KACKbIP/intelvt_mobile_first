@@ -853,15 +853,25 @@ class _HelpCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.icon(
-                onPressed: () {
-                  // TODO: экран/диалог поддержки
-                },
-                icon: const Icon(Icons.support_agent),
-                label: const Text('Связаться с поддержкой'),
-              ),
-            ),
+  alignment: Alignment.centerRight,
+  child: FilledButton.icon(
+    onPressed: () async {
+      final Uri url = Uri.parse('https://t.me/intelvt?direct');
+      // mode: LaunchMode.externalApplication заставит открыть именно приложение Telegram (или браузер),
+      // а не WebView внутри твоего приложения.
+      try {
+        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+          throw Exception('Не удалось открыть $url');
+        }
+      } catch (e) {
+        // Можно показать SnackBar с ошибкой, если ссылка не открылась
+        print('Ошибка при открытии ссылки: $e');
+      }
+    },
+    icon: const Icon(Icons.support_agent),
+    label: const Text('Связаться с поддержкой'),
+  ),
+),
           ],
         ),
       ),

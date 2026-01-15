@@ -622,4 +622,38 @@ class ApiClient {
 
     return 'Ошибка сети';
   }
+
+  static Future<void> deleteAccount() async {
+    final token = await getAccessToken();
+    if (token == null) throw AuthException('Вы не авторизованы');
+
+    try {
+      await _dio.delete( // Используем метод DELETE
+        '$_authBase/delete-account',
+      );
+      
+      // После успешного удаления на сервере, чистим локальные данные
+      await logout(); 
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
+  }
+  static Future<void> resetPassword({
+    required String phone,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      await _dio.post(
+        '$_authBase/reset-password',
+        data: {
+          'phone': phone,
+          'code': code,
+          'newPassword': newPassword,
+        },
+      );
+    } on DioException catch (e) {
+      throw AuthException(_extractMessage(e));
+    }
+  }
 }
