@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart'; // ✅ Импорт маски
-import '../services/api_client.dart';
+import '../../../../core/services/api_client.dart';
 import 'code_confirm_page.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
@@ -12,7 +12,7 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
-  
+
   // ✅ Добавляем маску, точно такую же, как на LoginPage
   final _phoneMask = MaskTextInputFormatter(
     mask: '+7 (###) ###-##-##',
@@ -23,7 +23,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   /// Нормализуем номер для API: "+7 (701) 123-45-67" -> "+77011234567"
   String _normalizePhone() {
-    final digits = _phoneMask.getUnmaskedText(); // Получаем только цифры (10 штук)
+    final digits = _phoneMask
+        .getUnmaskedText(); // Получаем только цифры (10 штук)
     if (digits.length != 10) {
       throw const FormatException('Номер введён не полностью');
     }
@@ -43,11 +44,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Код отправлен по SMS'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Код отправлен по SMS')));
 
       // Переходим на страницу ввода кода
       Navigator.push(
@@ -55,8 +54,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         MaterialPageRoute(
           builder: (_) => CodeConfirmPage(
             phone: normalizedPhone,
-            password: '',              // пароль здесь не нужен
-            isForPasswordReset: true,  // флаг восстановления
+            password: '', // пароль здесь не нужен
+            isForPasswordReset: true, // флаг восстановления
           ),
         ),
       );
@@ -90,6 +89,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Восстановление пароля'),
+        backgroundColor: Colors.white,
+        leading: IconButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          icon: Icon(Icons.arrow_back_ios_new_outlined),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -105,7 +111,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 style: TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 24),
-              
+
               // ✅ Поле с маской
               TextFormField(
                 keyboardType: TextInputType.phone,
@@ -113,6 +119,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 decoration: const InputDecoration(
                   labelText: 'Телефон',
                   hintText: '+7 (777) 123-45-67',
+                  hintStyle: TextStyle(color: Colors.grey),
                   prefixIcon: Icon(Icons.phone),
                   border: OutlineInputBorder(),
                 ),
@@ -124,7 +131,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   return null;
                 },
               ),
-              
+
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
@@ -140,7 +147,10 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Отправить код', style: TextStyle(fontSize: 16)),
+                      : const Text(
+                          'Отправить код',
+                          style: TextStyle(fontSize: 16),
+                        ),
                 ),
               ),
             ],

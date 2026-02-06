@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
-import '../navigation.dart';
-import '../screens/login_page.dart';
+import '../../../navigation.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
 import 'package:flutter_callkit_incoming/entities/entities.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:uuid/uuid.dart';
@@ -181,65 +181,68 @@ class ApiClient {
   static const _kRefresh = 'auth_refresh_token';
   static const _kUserId = 'auth_user_id';
   static const _kFullName = 'auth_full_name';
-  static const _kPhone = 'auth_phone'; 
+  static const _kPhone = 'auth_phone';
 
   static bool _isRefreshing = false;
 
-  static final Dio _dio = Dio(
-    BaseOptions(
-      baseUrl: _baseUrl,
-      connectTimeout: const Duration(seconds: 20),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: const {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-    ),
-  )..interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          final token = await getAccessToken();
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          handler.next(options);
-        },
-        onError: (DioException e, handler) async {
-          if (e.response?.statusCode != 401) {
-            return handler.next(e);
-          }
+  static final Dio _dio =
+      Dio(
+          BaseOptions(
+            baseUrl: _baseUrl,
+            connectTimeout: const Duration(seconds: 20),
+            receiveTimeout: const Duration(seconds: 30),
+            headers: const {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+          ),
+        )
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) async {
+              final token = await getAccessToken();
+              if (token != null && token.isNotEmpty) {
+                options.headers['Authorization'] = 'Bearer $token';
+              }
+              handler.next(options);
+            },
+            onError: (DioException e, handler) async {
+              if (e.response?.statusCode != 401) {
+                return handler.next(e);
+              }
 
-          if (_isRefreshing) {
-             return handler.next(e);
-          }
+              if (_isRefreshing) {
+                return handler.next(e);
+              }
 
-          try {
-            _isRefreshing = true;
-            
-            final newAuth = await _refreshTokenOnServer();
+              try {
+                _isRefreshing = true;
 
-            if (newAuth != null) {
-              await saveAuth(newAuth);
+                final newAuth = await _refreshTokenOnServer();
 
-              // Повторяем исходный запрос с новым токеном
-              final opts = e.requestOptions;
-              opts.headers['Authorization'] = 'Bearer ${newAuth.accessToken}';
-              
-              final clonedReq = await _dio.fetch(opts);
-              return handler.resolve(clonedReq);
-            } else {
-              await _performLogout();
-              return handler.next(e);
-            }
-          } catch (refreshErr) {
-             await _performLogout();
-             return handler.next(e);
-          } finally {
-            _isRefreshing = false;
-          }
-        },
-      ),
-    );
+                if (newAuth != null) {
+                  await saveAuth(newAuth);
+
+                  // Повторяем исходный запрос с новым токеном
+                  final opts = e.requestOptions;
+                  opts.headers['Authorization'] =
+                      'Bearer ${newAuth.accessToken}';
+
+                  final clonedReq = await _dio.fetch(opts);
+                  return handler.resolve(clonedReq);
+                } else {
+                  await _performLogout();
+                  return handler.next(e);
+                }
+              } catch (refreshErr) {
+                await _performLogout();
+                return handler.next(e);
+              } finally {
+                _isRefreshing = false;
+              }
+            },
+          ),
+        );
 
   // --- Внутренний метод рефреша ---
   static Future<AuthResponse?> _refreshTokenOnServer() async {
@@ -247,20 +250,20 @@ class ApiClient {
     if (refreshToken == null) return null;
 
     try {
-      final dioRefresh = Dio(BaseOptions(
-        baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        }
-      ));
+      final dioRefresh = Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: const Duration(seconds: 10),
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
 
       final resp = await dioRefresh.post(
-        '$_authBase/refresh-token', 
-        data: {
-          'refreshToken': refreshToken,
-        },
+        '$_authBase/refresh-token',
+        data: {'refreshToken': refreshToken},
       );
 
       if (resp.statusCode == 200 && resp.data != null) {
@@ -290,7 +293,9 @@ class ApiClient {
   }
 
   static Future<String?> getPhone() => _storage.read(key: _kPhone);
-  static Future<void> savePhone(String phone) => _storage.write(key: _kPhone, value: phone);
+  static Future<String?> getName() => _storage.read(key: _kFullName);
+  static Future<void> savePhone(String phone) =>
+      _storage.write(key: _kPhone, value: phone);
 
   static Future<void> saveAuth(AuthResponse auth) async {
     await _storage.write(key: _kAccess, value: auth.accessToken);
@@ -318,15 +323,12 @@ class ApiClient {
     try {
       final resp = await _dio.post<Map<String, dynamic>>(
         '$_authBase/login',
-        data: {
-          'phone': phone,
-          'password': password,
-        },
+        data: {'phone': phone, 'password': password},
       );
 
       final data = resp.data ?? {};
       final auth = AuthResponse.fromJson(data);
-      
+
       await saveAuth(auth);
       await savePhone(phone);
 
@@ -345,10 +347,7 @@ class ApiClient {
     try {
       await _dio.post(
         '$_authBase/register',
-        data: {
-          'phone': phone,
-          'password': password,
-        },
+        data: {'phone': phone, 'password': password},
       );
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
@@ -360,14 +359,9 @@ class ApiClient {
 
   // ---------- REGISTRATION BY CODE ----------
 
-  static Future<void> registerStart({
-    required String phone,
-  }) async {
+  static Future<void> registerStart({required String phone}) async {
     try {
-      await _dio.post(
-        '$_authBase/send-code',
-        data: {'phone': phone},
-      );
+      await _dio.post('$_authBase/send-code', data: {'phone': phone});
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));
     }
@@ -381,10 +375,7 @@ class ApiClient {
     try {
       await _dio.post(
         '$_authBase/verify-code',
-        data: {
-          'phone': phone,
-          'code': code,
-        },
+        data: {'phone': phone, 'code': code},
       );
 
       await register(phone: phone, password: password);
@@ -396,14 +387,9 @@ class ApiClient {
 
   // ---------- PASSWORD RESET ----------
 
-  static Future<void> sendPasswordResetCode({
-    required String phone,
-  }) async {
+  static Future<void> sendPasswordResetCode({required String phone}) async {
     try {
-      await _dio.post(
-        '$_authBase/send-code',
-        data: {'phone': phone},
-      );
+      await _dio.post('$_authBase/send-code', data: {'phone': phone});
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));
     }
@@ -416,13 +402,13 @@ class ApiClient {
     required String newName,
   }) async {
     try {
-      await _dio.post(
+      final response = await _dio.post(
         '$_authBase/update-name',
-        data: {
-          'userId': userId,
-          'fullName': newName,
-        },
+        data: {'userId': userId, 'fullName': newName},
       );
+      if (response.statusCode == 200) {
+        await _storage.write(key: _kFullName, value: newName);
+      }
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));
     }
@@ -452,8 +438,8 @@ class ApiClient {
   static Future<ParentDashboardData> getParentDashboard() async {
     final token = await getAccessToken();
     if (token == null || token.isEmpty) {
-       await _performLogout();
-       throw AuthException('Нет токена. Войдите заново.');
+      await _performLogout();
+      throw AuthException('Нет токена. Войдите заново.');
     }
 
     try {
@@ -462,6 +448,11 @@ class ApiClient {
       );
 
       final data = resp.data ?? {};
+      if (resp.statusCode == 401) {
+        _refreshTokenOnServer().then((value) {
+          return ParentDashboardData.fromJson(data);
+        });
+      } 
       return ParentDashboardData.fromJson(data);
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));
@@ -481,10 +472,7 @@ class ApiClient {
     try {
       await _dio.post(
         '$_authBase/update-soldier-name',
-        data: {
-          'soldierId': soldierId,
-          'soldierName': name,
-        },
+        data: {'soldierId': soldierId, 'soldierName': name},
       );
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));
@@ -500,22 +488,16 @@ class ApiClient {
     final token = await FirebaseMessaging.instance.getToken();
     String? voipToken;
 
-
-  if (Platform.isIOS) {
-    
-
-    try {
-      
-      
-  voipToken = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
-  print('--- МОЙ НОВЫЙ VOIP ТОКЕН ДЛЯ CURL ---');
-  print(voipToken); // Скопируйте его отсюда
-  print('-------------------------------------');
-
-    } catch (e) {
-      print("❌ Ошибка при получении токена: $e");
+    if (Platform.isIOS) {
+      try {
+        voipToken = await FlutterCallkitIncoming.getDevicePushTokenVoIP();
+        print('--- МОЙ НОВЫЙ VOIP ТОКЕН ДЛЯ CURL ---');
+        print(voipToken); // Скопируйте его отсюда
+        print('-------------------------------------');
+      } catch (e) {
+        print("❌ Ошибка при получении токена: $e");
+      }
     }
-  }
     final accessToken = await getAccessToken();
     if (accessToken == null) return;
 
@@ -527,7 +509,9 @@ class ApiClient {
           'platform': Platform.isAndroid ? 'android' : 'ios',
           'pushToken': token,
           'voipToken': voipToken, // Отправляем VoIP токен на сервер
-          'deviceName': deviceName ?? (Platform.isAndroid ? 'Android Device' : 'iOS Device'),
+          'deviceName':
+              deviceName ??
+              (Platform.isAndroid ? 'Android Device' : 'iOS Device'),
         },
         options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
       );
@@ -551,10 +535,7 @@ class ApiClient {
     try {
       final resp = await _dio.get<Map<String, dynamic>>(
         '$_baseUrl/api/agora/rtc-token',
-        queryParameters: {
-          'channel': channel.trim(),
-          'uid': uid,
-        },
+        queryParameters: {'channel': channel.trim(), 'uid': uid},
       );
 
       final data = resp.data ?? {};
@@ -571,10 +552,7 @@ class ApiClient {
     if (token == null) return;
 
     try {
-      await _dio.post(
-        '$_authBase/end-call', 
-        data: { 'callId': callId },
-      );
+      await _dio.post('$_authBase/end-call', data: {'callId': callId});
     } catch (_) {}
   }
 
@@ -585,10 +563,8 @@ class ApiClient {
     if (token == null) throw AuthException('Нет токена');
 
     try {
-      final resp = await _dio.get<List<dynamic>>(
-        '$_authBase/notifications',
-      );
-      
+      final resp = await _dio.get<List<dynamic>>('$_authBase/notifications');
+
       final list = resp.data ?? [];
       return list.map((e) => NotificationItem.fromJson(e)).toList();
     } on DioException catch (e) {
@@ -628,16 +604,18 @@ class ApiClient {
     if (token == null) throw AuthException('Вы не авторизованы');
 
     try {
-      await _dio.delete( // Используем метод DELETE
+      await _dio.delete(
+        // Используем метод DELETE
         '$_authBase/delete-account',
       );
-      
+
       // После успешного удаления на сервере, чистим локальные данные
-      await logout(); 
+      await logout();
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));
     }
   }
+
   static Future<void> resetPassword({
     required String phone,
     required String code,
@@ -646,11 +624,7 @@ class ApiClient {
     try {
       await _dio.post(
         '$_authBase/reset-password',
-        data: {
-          'phone': phone,
-          'code': code,
-          'newPassword': newPassword,
-        },
+        data: {'phone': phone, 'code': code, 'newPassword': newPassword},
       );
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));

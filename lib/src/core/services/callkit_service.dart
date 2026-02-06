@@ -7,7 +7,7 @@ import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
 import 'package:flutter_callkit_incoming/entities/ios_params.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:uuid/uuid.dart';
-import '../main.dart'; // Для доступа к navigatorKey
+import '../../../main.dart'; // Для доступа к navigatorKey
 import 'api_client.dart';
 
 class CallKitService {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/api_client.dart'; // Путь к вашему api_client
+import '../../../../core/services/api_client.dart'; // Путь к вашему api_client
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});

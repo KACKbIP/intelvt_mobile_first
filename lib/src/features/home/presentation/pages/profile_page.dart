@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart'; // Не забудь добавить этот пакет в pubspec.yaml
 
-import '../services/api_client.dart';
-import 'login_page.dart';
+import '../../../../core/services/api_client.dart';
+import '../../../auth/presentation/pages/login_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final int userId;
@@ -21,21 +21,31 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  late String _fullName;
+  
+  Future<String> getName() async {
+    String name = await ApiClient.getName() ?? 'No name';
+    return name;
+  }
   late String _phone;
+  late String _fullName;
 
   bool _isLogoutProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    _fullName = widget.fullName ?? 'Имя пользователя';
+    _fullName = widget.fullName  ?? 'У вас пока нет имени';
     _phone = widget.phone ?? '+7 XXX XXX XX XX';
+
+    ApiClient.getName().then((name) {
+    if (!mounted || name == null) return;
+    setState(() => _fullName = name);
+  });
+
   }
 
-  // ==================== SUPPORT (TELEGRAM) ====================
   Future<void> _openSupport() async {
-    final Uri url = Uri.parse('https://t.me/intelvt?direct');
+    final Uri url = Uri.parse('tg://resolve?domain=intelvt');
     try {
       if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
         throw Exception('Не удалось открыть Telegram');
@@ -155,7 +165,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 if (!mounted) return;
 
                 setState(() => _fullName = newName);
-                Navigator.pop(dialogContext);
+                Navigator.pop(context);
 
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Имя успешно обновлено')),
@@ -176,7 +186,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 key: formKey,
                 child: TextFormField(
                   controller: controller,
-                  decoration: const InputDecoration(labelText: 'Имя'),
+                  decoration: const InputDecoration(labelText: 'Имя', hintText: 'Новое Имя'),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Введите имя';
                     if (v.trim().length < 2) return 'Слишком короткое имя';
@@ -313,7 +323,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Профиль'),
+        centerTitle: true,
         actions: [
           IconButton(
             icon: _isLogoutProcessing

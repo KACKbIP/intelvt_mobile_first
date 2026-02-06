@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../services/api_client.dart';
+import '../../../../core/services/api_client.dart';
 import 'login_page.dart';
-import 'main_navigation_page.dart';
+import '../../../home/presentation/pages/main_navigation_page.dart';
 
 class AuthCheckPage extends StatefulWidget {
   const AuthCheckPage({super.key});

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
-import '/services/api_client.dart';
+import '../../../../core/services/api_client.dart';
 import 'code_confirm_page.dart'; // 👈 добавить импорт
 
 class RegisterPage extends StatefulWidget {
@@ -73,54 +73,52 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _onRegisterPressed() async {
-  if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
 
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    final normalizedPhone = _normalizePhone();
+    try {
+      final normalizedPhone = _normalizePhone();
 
-    await ApiClient.registerStart(
-      phone: normalizedPhone
-    );
+      await ApiClient.registerStart(phone: normalizedPhone);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Код отправлен по SMS'),
-      ),
-    );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Код отправлен по SMS')));
 
-    // Переходим на экран ввода кода
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CodeConfirmPage(
-          phone: normalizedPhone,
-          password: _passwordController.text,      // 👈 добавили
-          isForPasswordReset: false,
+      // Переходим на экран ввода кода
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CodeConfirmPage(
+            phone: normalizedPhone,
+            password: _passwordController.text, // 👈 добавили
+            isForPasswordReset: false,
+          ),
         ),
-      ),
-    );
-  } on AuthException catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(e.message)),
-    );
-  } catch (_) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Ошибка при регистрации. Попробуйте позже.'),
-      ),
-    );
-  } finally {
-    if (mounted) {
-      setState(() => _isLoading = false);
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ошибка при регистрации. Попробуйте позже.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -128,6 +126,13 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Регистрация'),
+        backgroundColor: Colors.white,
+        leading: IconButton(
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          icon: Icon(Icons.arrow_back_ios_new_outlined),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -137,6 +142,7 @@ class _RegisterPageState extends State<RegisterPage> {
             child: Form(
               key: _formKey,
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const SizedBox(height: 8),
                   Align(
@@ -159,6 +165,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     decoration: const InputDecoration(
                       labelText: 'Номер телефона',
                       hintText: '+7 (777) 123-45-67',
+                      hintStyle: TextStyle(color: Colors.grey),
                       prefixIcon: Icon(Icons.phone),
                     ),
                     validator: _validatePhone,

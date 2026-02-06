@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'parent_dashboard_page.dart';
-import 'calls_history_page.dart';
+import '../../../calls/presentation/pages/calls_history_page.dart';
 import 'notifications_page.dart';
 import 'profile_page.dart';
-import '/services/permissions_service.dart';
-import '/services/api_client.dart';
+import '../../../../core/services/permissions_service.dart';
+import '../../../../core/services/api_client.dart';
 import 'dart:io'; // Обязательно добавь для Platform
 import 'package:device_info_plus/device_info_plus.dart'; // Полезно для имен
 

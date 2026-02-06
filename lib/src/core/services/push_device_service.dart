@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '/services/api_client.dart';
+import 'api_client.dart';
 
 class PushDeviceService {
   Future<void> registerDevice() async {

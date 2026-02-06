@@ -4,8 +4,8 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'pin_code_page.dart'; // ✅ Импортируем экран ПИН-кода
 import 'register_page.dart';
 import 'forgot_password_page.dart';
-import '/services/api_client.dart';
-import '/services/push_device_service.dart';
+import '../../../../core/services/api_client.dart';
+import '../../../../core/services/push_device_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -67,6 +67,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _onLoginPressed() async {
     if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
 
     setState(() => _isLoading = true);
 
@@ -171,6 +172,7 @@ class _LoginPageState extends State<LoginPage> {
                           decoration: const InputDecoration(
                             labelText: 'Номер телефона',
                             hintText: '+7 (777) 123-45-67',
+                            hintStyle: TextStyle(color: Colors.grey),
                             prefixIcon: Icon(Icons.phone),
                           ),
                           validator: _validatePhone,
@@ -183,6 +185,7 @@ class _LoginPageState extends State<LoginPage> {
                           obscureText: _isPasswordHidden,
                           decoration: InputDecoration(
                             labelText: 'Пароль',
+                            hintStyle: TextStyle(color: Colors.grey),
                             prefixIcon: const Icon(Icons.lock),
                             suffixIcon: IconButton(
                               icon: Icon(

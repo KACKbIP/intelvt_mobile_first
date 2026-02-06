@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '/services/api_client.dart';
-import 'parent_dashboard_page.dart';
+import '../../../../core/services/api_client.dart';
+import '../../../home/presentation/pages/parent_dashboard_page.dart';
 import 'login_page.dart';
-import '/services/push_device_service.dart';
+import '../../../../core/services/push_device_service.dart';
 
 class CodeConfirmPage extends StatefulWidget {
   final String phone;
@@ -50,6 +50,8 @@ class _CodeConfirmPageState extends State<CodeConfirmPage> {
             
             Future<void> submitNewPassword() async {
               if (!dialogFormKey.currentState!.validate()) return;
+              FocusScope.of(context).unfocus();
+
 
               setDialogState(() => isDialogLoading = true);
 
@@ -152,6 +154,7 @@ class _CodeConfirmPageState extends State<CodeConfirmPage> {
   // ================= ОСНОВНАЯ КНОПКА "ПОДТВЕРДИТЬ" =================
   Future<void> _onConfirmPressed() async {
     if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
 
     setState(() => _isLoading = true);
     final code = _codeController.text.trim();
