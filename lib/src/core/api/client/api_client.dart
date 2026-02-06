@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -6,11 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
-import '../../../navigation.dart';
-import '../../features/auth/presentation/pages/login_page.dart';
-import 'package:flutter_callkit_incoming/entities/entities.dart';
-import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
-import 'package:uuid/uuid.dart';
+import 'package:intelvt_mobile_first/src/core/services/storage_service.dart';
+import '../../../../navigation.dart';
+import '../../../features/auth/presentation/pages/login_page.dart';
 
 /// ====== АВТОРИЗАЦИЯ ======
 
@@ -449,10 +446,12 @@ class ApiClient {
 
       final data = resp.data ?? {};
       if (resp.statusCode == 401) {
-        _refreshTokenOnServer().then((value) {
-          return ParentDashboardData.fromJson(data);
-        });
-      } 
+        await _refreshTokenOnServer();
+        final retryResp = await _dio.get<Map<String, dynamic>>(
+          '$_authBase/parent-dashboard',
+        );
+        return ParentDashboardData.fromJson(retryResp.data ?? {});
+      }
       return ParentDashboardData.fromJson(data);
     } on DioException catch (e) {
       throw AuthException(_extractMessage(e));

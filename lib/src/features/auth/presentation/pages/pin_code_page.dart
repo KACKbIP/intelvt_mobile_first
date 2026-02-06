@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/services/security_service.dart';
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 import '../../../home/presentation/pages/main_navigation_page.dart';
 import 'login_page.dart';
 

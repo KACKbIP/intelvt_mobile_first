@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intelvt_mobile_first/src/features/home/presentation/widgets/widgets.dart';
 
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 
 class ParentDashboardPage extends StatefulWidget {
   const ParentDashboardPage({super.key});

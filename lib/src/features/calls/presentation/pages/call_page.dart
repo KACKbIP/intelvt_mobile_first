@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 import '../../../../core/services/callkit_service.dart';
 
 class CallPage extends StatefulWidget {

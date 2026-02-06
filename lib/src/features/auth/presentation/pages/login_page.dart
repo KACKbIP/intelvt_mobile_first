@@ -4,7 +4,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'pin_code_page.dart'; // ✅ Импортируем экран ПИН-кода
 import 'register_page.dart';
 import 'forgot_password_page.dart';
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 import '../../../../core/services/push_device_service.dart';
 
 class LoginPage extends StatefulWidget {

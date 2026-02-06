@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 import 'login_page.dart';
 import '../../../home/presentation/pages/main_navigation_page.dart';
 

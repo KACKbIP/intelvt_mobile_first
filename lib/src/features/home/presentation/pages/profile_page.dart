@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart'; // Не забудь добавить этот пакет в pubspec.yaml
 
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -324,6 +324,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
+        title: Text('Профиль'),
         actions: [
           IconButton(
             icon: _isLogoutProcessing

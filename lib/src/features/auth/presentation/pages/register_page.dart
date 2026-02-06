@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 import 'code_confirm_page.dart'; // 👈 добавить импорт
 
 class RegisterPage extends StatefulWidget {

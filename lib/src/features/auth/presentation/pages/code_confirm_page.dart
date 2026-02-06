@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/services/api_client.dart';
+import '../../../../core/api/client/api_client.dart';
 import '../../../home/presentation/pages/parent_dashboard_page.dart';
 import 'login_page.dart';
 import '../../../../core/services/push_device_service.dart';

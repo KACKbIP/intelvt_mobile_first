@@ -12,12 +12,12 @@ class Endpoints {
   static const String resetPassword = "/reset-password";
 
   // Home and etc.
-  static const String updateName = "update-name";  
-  static const String updateSoldierName = "update-soldier-name";  
-  static const String changePassword = "change-password";  
-  static const String parentDashboard = "parent-dashboard";  
-  static const String endCall = "endCall";  
-  static const String notifications = "notifications";  
+  static const String updateName = "/update-name";  
+  static const String updateSoldierName = "/update-soldier-name";  
+  static const String changePassword = "/change-password";  
+  static const String parentDashboard = "/parent-dashboard";  
+  static const String endCall = "/end-call";  
+  static const String notifications = "/notifications";  
 
   // Agora
   static const String getRtcToken = "/rtc-token";  

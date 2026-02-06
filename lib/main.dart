@@ -9,7 +9,7 @@ import 'src/features/auth/presentation/pages/login_page.dart';
 import 'src/features/calls/presentation/pages/call_page.dart';
 import 'src/features/auth/presentation/pages/pin_code_page.dart';
 import 'src/core/services/callkit_service.dart';
-import 'src/core/services/api_client.dart';
+import 'src/core/api/client/api_client.dart';
 import 'src/core/services/security_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();

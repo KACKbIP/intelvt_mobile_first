@@ -4,9 +4,8 @@ import '../../../calls/presentation/pages/calls_history_page.dart';
 import 'notifications_page.dart';
 import 'profile_page.dart';
 import '../../../../core/services/permissions_service.dart';
-import '../../../../core/services/api_client.dart';
-import 'dart:io'; // Обязательно добавь для Platform
-import 'package:device_info_plus/device_info_plus.dart'; // Полезно для имен
+import '../../../../core/api/client/api_client.dart';
+import 'dart:io';
 
 class MainNavigationPage extends StatefulWidget {
   final int userId;
@@ -177,7 +176,6 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   }
 }
 
-/// Иконка с лёгкой анимацией масштаба
 class _NavIcon extends StatelessWidget {
   final IconData icon;
   final bool isSelected;

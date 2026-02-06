@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intelvt_mobile_first/src/features/calls/presentation/pages/calls_history_page.dart';
-import 'package:intelvt_mobile_first/src/core/services/api_client.dart';
+import 'package:intelvt_mobile_first/src/core/api/client/api_client.dart';
 
 class CallsHistoryCard extends StatelessWidget {
   final List<CallItem> calls;

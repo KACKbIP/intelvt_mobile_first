@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/services/api_client.dart'; // Путь к вашему api_client
+import '../../../../core/api/client/api_client.dart'; // Путь к вашему api_client
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -67,7 +67,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                       children: [
                         Icon(Icons.notifications_none, size: 64, color: Colors.grey),
                         SizedBox(height: 16),
-                        Text('Уведомлений нет', style: TextStyle(color: Colors.grey)),
+                        Text('Уведомлений нет', style: TextStyle(color: Colors.grey, fontSize: 18)),
                       ],
                     ),
                   )
